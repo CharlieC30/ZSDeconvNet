@@ -4,33 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ZS-DeconvNet is a zero-shot learning tool for instant denoising and super-resolution in optical fluorescence microscopy. The project consists of three main components:
+ZS-DeconvNet is a zero-shot learning tool for instant denoising and super-resolution in optical fluorescence microscopy. The repository contains three main components:
 
-1. **Python/MATLAB Implementation** (`Python_MATLAB_Codes/`): Core training and inference code
-2. **Fiji Plugin** (`Fiji_Plugin/`): ImageJ/Fiji plugin for GUI-based usage  
-3. **Raw Data** (`Raw_Data/`): Test datasets for various microscopy modalities
+1. **Python/MATLAB Implementation** (`Python_MATLAB_Codes/`) - Core training and inference code
+2. **Fiji Plugin** (`Fiji_Plugin/`) - ImageJ/Fiji plugin for GUI-based usage
+3. **Raw Data** (`Raw_Data/`) - Test datasets for various microscopy modalities
 
 ## Architecture
 
-### Python Implementation Structure
-- `train_inference_python/`: Main Python codebase
-  - `models/`: Neural network architectures (U-Net, RCAN3D variants)
-  - `utils/`: Utility functions for data loading, augmentation, loss functions
-  - Training scripts: `Train_ZSDeconvNet_2D.py`, `Train_ZSDeconvNet_3D.py`, etc.
-  - Inference scripts: `Infer_2D.py`, `Infer_3D.py`
+The system uses a two-stage U-Net architecture:
+- **Stage 1**: Denoising network that removes noise from input images
+- **Stage 2**: Deconvolution network that performs super-resolution on denoised output
+- Both 2D and 3D variants are available
+- Models support various microscopy types: wide-field, confocal, SIM, lattice light-sheet
 
-### MATLAB Data Generation
-- `data_augment_recorrupt_matlab/`: MATLAB code for training data preparation
-  - `GenData4ZS-DeconvNet/`: Standard data augmentation
-  - `GenData4ZS-DeconvNet-SIM/`: SIM-specific data generation
-  - `XxUtils/`: Common utility functions
+## Key Components
 
-### Model Types
-The codebase supports multiple microscopy modalities:
-- 2D/3D Wide-field microscopy
-- 2D/3D Structured Illumination Microscopy (SIM)
-- Confocal microscopy
-- Lattice Light-Sheet Microscopy (LLSM)
+### Python Training/Inference
+- **Models**: `twostage_Unet.py` (2D), `twostage_Unet3D.py` (3D), `twostage_RCAN3D.py` (3D RCAN)
+- **Training scripts**: `Train_ZSDeconvNet_*.py` for different modalities (2D, 3D, SIM variants)
+- **Inference scripts**: `Infer_2D.py`, `Infer_3D.py`
+- **Utilities**: Data loading, loss functions, augmentation in `utils/` directory
+
+### MATLAB Data Processing
+- **Data augmentation**: `GenData4ZS-DeconvNet/` for standard microscopy, `GenData4ZS-DeconvNet-SIM/` for SIM
+- **PSF simulation**: Tools for generating theoretical PSFs when experimental ones aren't available
 
 ## Common Development Commands
 
@@ -44,13 +42,13 @@ pip install -r requirements.txt
 
 ### Training Models
 ```bash
-# 2D training
+# 2D training example
 bash train_demo_2D.sh
 
-# 3D training  
+# 3D training example  
 bash train_demo_3D.sh
 
-# SIM training
+# SIM training examples
 bash train_demo_2DSIM.sh
 bash train_demo_3DSIM.sh
 ```
@@ -64,46 +62,38 @@ bash infer_demo_2D.sh
 bash infer_demo_3D.sh
 ```
 
-### Converting Models for Fiji Plugin
+### Model Conversion (Python to Fiji Plugin)
 ```bash
 cd Fiji_Plugin/TransferTFModelToPluginFormat
 conda create -n tensorflow1 python=3.7
 conda activate tensorflow1
 pip install -r requirements.txt
-bash tf_model2plugin_format.sh
+python TransferZSDeconv2DModelToPluginFormat.py  # for 2D models
+python TransferZSDeconv3DModelToPluginFormat.py  # for 3D models
 ```
 
-## Key Technical Requirements
+## Important Configuration Notes
 
-### Dependencies
-- TensorFlow 2.5.0 for Python implementation
-- TensorFlow 1.15.0 for Fiji plugin compatibility
-- CUDA 11.4 + cuDNN for GPU acceleration
-- MATLAB for data generation scripts
+- **PSF Requirements**: PSF files must have correct dxy and dz values, should be normalized by dividing by summation
+- **Data Structure**: Training data should be organized as `data_dir/folder/input/` and `data_dir/folder/gt/`
+- **Memory Management**: Use tiling for large images (adjust `num_seg_window_x/y`, `overlap_x/y`, `batch_size`)
+- **GPU Setup**: Requires CUDA 11.4 + cuDNN for TensorFlow 2.5.0, or CUDA 10.1 + cuDNN 7.5.1 for Fiji plugin
 
-### Data Format Requirements
-- Training data structure: `data_dir/folder/input/` and `data_dir/folder/gt/`
-- PSF files: `.tif` format or `.mrc` format for OTF
-- Image formats: `.tif` files for microscopy data
-- PSF normalization: Divide by intensity summation before use
+## Key Parameters
 
-### Model Configuration
-- 2D models: 128x128 patch size, batch size 4
-- 3D models: 64x64x64 patch size, batch size 3
-- Learning rates: 5e-5 (2D), 1e-4 (3D)
-- Loss components: MSE/MAE + deconvolution + Hessian regularization
+### Training
+- **Patch sizes**: 128x128 (2D), 64x64x64 (3D)
+- **Learning rates**: 5e-5 (2D), 1e-4 (3D)
+- **Batch sizes**: 4 (2D), 3 (3D)
+- **Regularization**: Hessian weight 0.02 (2D), 0.1 (3D)
 
-## Important File Locations
+### Data Augmentation
+- **Recorruption factors**: α=1-2, β₁=0.5-1.5, β₂=camera noise std
+- **Augmentation counts**: 20,000 patches (2D), 10,000 patches (3D)
 
-- Pre-trained models: Download from Google Drive links in README files
-- Saved models directory: `Python_MATLAB_Codes/saved_models/` (excluded from git)
-- Training data: Should be organized in `input/` and `gt/` subdirectories
-- PSF files: Required for deconvolution loss calculation during training
+## File Structure Conventions
 
-## Development Notes
-
-- Models saved during Python training can be directly used for inference
-- For Fiji plugin usage, models must be converted to TensorFlow 1.x format
-- PSF files must have correct dxy/dz values and be normalized
-- Memory usage can be managed through tiling during inference
-- The codebase supports both CPU and GPU execution
+- Models saved as `.h5` files in `saved_models/`
+- Training data in paired `input/` and `gt/` folders
+- PSF files as `.tif` (PSF) or `.mrc` (OTF) format
+- Test data organized by modality (WF2D, SIM2D, LLS3D, etc.)
