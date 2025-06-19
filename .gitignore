@@ -1,3 +1,9 @@
 Python_MATLAB_Codes/saved_models/*
 Raw_Data/*
 PyTorch_Deconv_v1.zip
+PyTorch_Deconv/Data/*
+PyTorch_Deconv/src/__pycache__
+PyTorch_Deconv/src/data/__pycache__
+PyTorch_Deconv/src/losses/__pycache__
+PyTorch_Deconv/src/models/__pycache__
+PyTorch_Deconv/src/utils/__pycache__

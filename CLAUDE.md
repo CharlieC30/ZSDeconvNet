@@ -4,56 +4,56 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ZS-DeconvNet is a zero-shot learning tool for instant denoising and super-resolution in optical fluorescence microscopy. The repository contains three main components:
+ZS-DeconvNet is a zero-shot learning tool for instant denoising and super-resolution in optical fluorescence microscopy. The repository provides three main implementations:
 
-1. **Python/MATLAB Implementation** (`Python_MATLAB_Codes/`) - Core training and inference code
-2. **Fiji Plugin** (`Fiji_Plugin/`) - ImageJ/Fiji plugin for GUI-based usage
-3. **Raw Data** (`Raw_Data/`) - Test datasets for various microscopy modalities
+1. **Python/MATLAB Implementation** (`Python_MATLAB_Codes/`) - Core training and inference
+2. **Fiji Plugin** (`Fiji_Plugin/`) - ImageJ/Fiji plugin for easy GUI usage  
+3. **PyTorch Implementation** (`PyTorch_Deconv/`) - Alternative PyTorch version
 
 ## Architecture
 
-The system uses a two-stage U-Net architecture:
-- **Stage 1**: Denoising network that removes noise from input images
-- **Stage 2**: Deconvolution network that performs super-resolution on denoised output
-- Both 2D and 3D variants are available
-- Models support various microscopy types: wide-field, confocal, SIM, lattice light-sheet
+### Core Models
+- **2D ZS-DeconvNet**: Two-stage U-Net architecture for 2D deconvolution (`models/twostage_Unet.py`)
+- **3D ZS-DeconvNet**: 3D variant using RCAN architecture (`models/twostage_RCAN3D.py`, `models/twostage_Unet3D.py`)
+- Both models use a two-stage approach: first stage for denoising, second stage for deconvolution
 
-## Key Components
+### Key Components
+- **Data Augmentation**: MATLAB scripts in `data_augment_recorrupt_matlab/` for training data generation
+- **Loss Functions**: Custom loss combining MSE/MAE, deconvolution loss, and regularization terms (Hessian, TV, L1)
+- **PSF Integration**: Point Spread Function handling for deconvolution calculations
 
-### Python Training/Inference
-- **Models**: `twostage_Unet.py` (2D), `twostage_Unet3D.py` (3D), `twostage_RCAN3D.py` (3D RCAN)
-- **Training scripts**: `Train_ZSDeconvNet_*.py` for different modalities (2D, 3D, SIM variants)
-- **Inference scripts**: `Infer_2D.py`, `Infer_3D.py`
-- **Utilities**: Data loading, loss functions, augmentation in `utils/` directory
+## Development Commands
 
-### MATLAB Data Processing
-- **Data augmentation**: `GenData4ZS-DeconvNet/` for standard microscopy, `GenData4ZS-DeconvNet-SIM/` for SIM
-- **PSF simulation**: Tools for generating theoretical PSFs when experimental ones aren't available
-
-## Common Development Commands
-
-### Environment Setup
+### Python Environment Setup
 ```bash
+# Create conda environment
 conda create -n zs-deconvnet python=3.9.7
 conda activate zs-deconvnet
+
+# Install dependencies (TensorFlow version)
 cd Python_MATLAB_Codes/train_inference_python
 pip install -r requirements.txt
+
+# Install CUDA support
+conda install cudatoolkit==11.3.1
+conda install cudnn==8.2.1
 ```
 
 ### Training Models
 ```bash
-# 2D training example
+# 2D training
+cd Python_MATLAB_Codes/train_inference_python
 bash train_demo_2D.sh
 
-# 3D training example  
+# 3D training
 bash train_demo_3D.sh
 
-# SIM training examples
+# SIM-specific training
 bash train_demo_2DSIM.sh
 bash train_demo_3DSIM.sh
 ```
 
-### Running Inference
+### Inference
 ```bash
 # 2D inference
 bash infer_demo_2D.sh
@@ -62,38 +62,48 @@ bash infer_demo_2D.sh
 bash infer_demo_3D.sh
 ```
 
-### Model Conversion (Python to Fiji Plugin)
+### Fiji Plugin Conversion
 ```bash
-cd Fiji_Plugin/TransferTFModelToPluginFormat
+# Convert Python model to Fiji plugin format
 conda create -n tensorflow1 python=3.7
 conda activate tensorflow1
+cd Fiji_Plugin/TransferTFModelToPluginFormat
 pip install -r requirements.txt
-python TransferZSDeconv2DModelToPluginFormat.py  # for 2D models
-python TransferZSDeconv3DModelToPluginFormat.py  # for 3D models
+
+# For 2D models
+python TransferZSDeconv2DModelToPluginFormat.py
+
+# For 3D models  
+python TransferZSDeconv3DModelToPluginFormat.py
 ```
-
-## Important Configuration Notes
-
-- **PSF Requirements**: PSF files must have correct dxy and dz values, should be normalized by dividing by summation
-- **Data Structure**: Training data should be organized as `data_dir/folder/input/` and `data_dir/folder/gt/`
-- **Memory Management**: Use tiling for large images (adjust `num_seg_window_x/y`, `overlap_x/y`, `batch_size`)
-- **GPU Setup**: Requires CUDA 11.4 + cuDNN for TensorFlow 2.5.0, or CUDA 10.1 + cuDNN 7.5.1 for Fiji plugin
 
 ## Key Parameters
 
-### Training
-- **Patch sizes**: 128x128 (2D), 64x64x64 (3D)
-- **Learning rates**: 5e-5 (2D), 1e-4 (3D)
-- **Batch sizes**: 4 (2D), 3 (3D)
-- **Regularization**: Hessian weight 0.02 (2D), 0.1 (3D)
+### Training Parameters
+- **2D Models**: patch_size=128, batch_size=4, epochs=250, lr=5e-5
+- **3D Models**: patch_size=64, batch_size=3, epochs=100, lr=1e-4
+- **Loss weights**: Hessian regularization (0.02 for 2D, 0.1 for 3D)
 
-### Data Augmentation
-- **Recorruption factors**: α=1-2, β₁=0.5-1.5, β₂=camera noise std
-- **Augmentation counts**: 20,000 patches (2D), 10,000 patches (3D)
+### Data Requirements
+- Input images in `data_dir/folder/input/`
+- Ground truth in `data_dir/folder/gt/`
+- PSF files in .tif or .mrc format
+- Sampling intervals (dx, dy, dz) must match PSF
 
-## File Structure Conventions
+### Model Files
+- TensorFlow 2.5.0 models saved as .h5 weights
+- Fiji plugin models in .zip format (SaveModelBundle)
+- Pre-trained models available via Google Drive links
 
-- Models saved as `.h5` files in `saved_models/`
-- Training data in paired `input/` and `gt/` folders
-- PSF files as `.tif` (PSF) or `.mrc` (OTF) format
-- Test data organized by modality (WF2D, SIM2D, LLS3D, etc.)
+## Data Structure
+- `Raw_Data/`: Original microscopy data (2D/3D, various modalities)
+- `saved_models/`: Pre-trained models organized by modality
+- Training data generated via MATLAB augmentation scripts
+- PSF files required for deconvolution loss calculation
+
+## Important Notes
+- TensorFlow GPU 2.5.0 required for training
+- Fiji plugin uses TensorFlow-Java 1.15.0
+- PSF normalization critical - divide by sum before use
+- 3D models require proper z-axis dimension mapping
+- Memory management via tiling for large images
