@@ -162,19 +162,3 @@ class PSFProcessor:
         return self
 
 
-if __name__ == "__main__":
-    # Test PSF loading
-    import os
-    
-    # Test with your PSF file
-    psf_path = "/path/to/your/psf.tif"  # Update this path
-    if os.path.exists(psf_path):
-        target_shape = (64, 64)
-        target_dx = 0.0313
-        target_dy = 0.0313
-        
-        psf_tensor = load_and_process_psf(psf_path, target_shape, target_dx, target_dy)
-        print(f"PSF tensor shape: {psf_tensor.shape}")
-        print(f"PSF sum: {psf_tensor.sum().item()}")
-    else:
-        print("PSF file not found. Update the path for testing.")

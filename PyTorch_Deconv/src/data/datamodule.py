@@ -351,28 +351,3 @@ class InferenceDataset(Dataset):
         pad_width = ((self.insert_xy, self.insert_xy), (self.insert_xy, self.insert_xy))
         return np.pad(img, pad_width, mode='constant', constant_values=0)
 
-
-if __name__ == "__main__":
-    # Test the DataModule
-    data_dir = "/home/aero/charliechang/projects/ZS-DeconvNet/PyTorch_Deconv/Data"
-    
-    dm = DeconvDataModule(
-        data_dir=data_dir,
-        batch_size=2,
-        patch_size=128,
-        insert_xy=16
-    )
-    
-    # Setup for training
-    dm.setup('fit')
-    
-    # Test train dataloader
-    train_loader = dm.train_dataloader()
-    print(f"Number of training batches: {len(train_loader)}")
-    
-    # Get a sample batch
-    for batch in train_loader:
-        input_batch, target_batch = batch
-        print(f"Input batch shape: {input_batch.shape}")
-        print(f"Target batch shape: {target_batch.shape}")
-        break

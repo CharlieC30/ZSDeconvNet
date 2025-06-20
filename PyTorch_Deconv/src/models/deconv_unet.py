@@ -29,13 +29,12 @@ class ConcatBlock(nn.Module):
         self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
         
         layers = []
-        # First conv after concatenation
-        layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
-        layers.append(nn.ReLU(inplace=True))
-        
-        # Additional conv layers - all use out_channels
-        for _ in range(conv_num - 1):
-            layers.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1))
+        # All conv layers use the same output channels (no reduction)
+        for i in range(conv_num):
+            if i == 0:
+                layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
+            else:
+                layers.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1))
             layers.append(nn.ReLU(inplace=True))
         
         self.conv_block = nn.Sequential(*layers)
@@ -133,7 +132,7 @@ class DeconvUNet(nn.Module):
         
         current = self.final_relu(self.final_conv1(current))
         current = self.final_relu(self.final_conv2(current))
-        output = self.final_relu(self.final_conv3(current))
+        output = self.final_conv3(current)  # No ReLU on final output
         
         return output
     
@@ -175,11 +174,3 @@ def create_deconv_unet(config=None):
     return DeconvUNet(**config)
 
 
-if __name__ == "__main__":
-    # Test the model
-    model = create_deconv_unet()
-    x = torch.randn(1, 1, 160, 160)  # Batch=1, Channels=1, H=160, W=160
-    output = model(x)
-    print(f"Input shape: {x.shape}")
-    print(f"Output shape: {output.shape}")
-    print(f"Model parameters: {sum(p.numel() for p in model.parameters())}")

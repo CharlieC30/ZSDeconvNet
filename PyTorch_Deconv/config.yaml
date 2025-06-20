@@ -46,7 +46,7 @@ psf:
 
 # Trainer configuration
 trainer:
-  max_epochs: 100           # Maximum number of epochs
+  max_epochs: 250        # Maximum number of epochs
   precision: 32            # Training precision (16, 32, or 64)
   gradient_clip_val: 0.5   # Gradient clipping value
   accumulate_grad_batches: 1

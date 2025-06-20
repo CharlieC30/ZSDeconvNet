@@ -1,185 +1,191 @@
-# PyTorch Lightning Deconvolution Network
+# ZS-DeconvNet PyTorch Implementation
 
-A modern PyTorch Lightning implementation of ZS-DeconvNet for single-stage 2D deconvolution. This implementation processes each z-slice of 3D TIFF files as independent 2D images for deconvolution.
+A PyTorch Lightning implementation of Zero-Shot Deconvolution Network for 2D fluorescence microscopy image deconvolution.
+
+## Overview
+
+This implementation provides a single-stage 2D U-Net for deconvolution with PSF-based loss function. It processes 3D TIFF files by treating each z-slice as an independent 2D image for deconvolution.
 
 ## Features
 
-- **Single-stage deconvolution**: Removed the denoising stage, focuses only on deconvolution
-- **PyTorch Lightning**: Modern training framework with automatic logging, checkpointing, and multi-GPU support
-- **3D TIFF support**: Processes each z-slice independently as 2D images
-- **PSF-based loss**: Implements PSF convolution loss with regularization terms
-- **Flexible data handling**: Supports various input formats and patch-based training
-- **Tiled inference**: Supports processing of large images through tiling
+- Single-stage U-Net architecture (deconvolution only, denoising stage removed)
+- PSF convolution loss with Total Variation and Hessian regularization
+- 3D TIFF processing with z-slice independence
+- PyTorch Lightning framework for modern training
+- Automatic experiment organization with timestamps
+- GPU acceleration support
 
 ## Installation
 
-1. Create a conda environment:
+### Requirements
+
+- Python 3.9+
+- CUDA-compatible GPU (recommended)
+- Conda or pip package manager
+
+### Setup Environment
+
+1. Create and activate conda environment:
 ```bash
-conda create -n pytorch-deconv python=3.9
-conda activate pytorch-deconv
+conda create -n zs-deconvnet_pytorch python=3.9
+conda activate zs-deconvnet_pytorch
 ```
 
 2. Install dependencies:
 ```bash
+cd PyTorch_Deconv
 pip install -r requirements.txt
 ```
 
-## Data Structure
+## Directory Structure
 
-Organize your data as follows:
 ```
-Data/
-├── Train/           # Training 3D TIFF files
-│   ├── image1.tif
-│   ├── image2.tif
-│   └── ...
-├── Inference/       # Inference 3D TIFF files
-│   ├── test1.tif
-│   ├── test2.tif
-│   └── ...
-└── PSF/            # Point Spread Function files
-    └── psf_emLambda525_dxy0.0313_NA1.3.tif
+PyTorch_Deconv/
+├── src/                    # Core modules
+│   ├── models/            # U-Net model and Lightning module
+│   ├── losses/            # PSF convolution loss functions
+│   ├── data/              # Data loading and processing
+│   └── utils/             # PSF utilities
+├── experiments/           # Training experiments (auto-generated)
+│   └── MMDD_HHMM/        # Timestamped experiment folders
+├── Data/                  # Data directory
+│   ├── Train/            # Training TIFF files
+│   ├── Inference/        # Input files for inference
+│   └── PSF/              # PSF files
+├── config.yaml           # Training configuration
+├── train.py              # Training script
+├── infer.py              # Inference script
+└── requirements.txt      # Dependencies
 ```
 
 ## Usage
 
 ### Training
 
-1. **Prepare your configuration**: Edit `config.yaml` to match your setup:
-   - Adjust batch size, learning rate, and other hyperparameters
-   - Set the correct PSF sampling intervals
-   - Configure regularization weights
+Train a new model:
 
-2. **Run training**:
 ```bash
 python train.py \
     --config config.yaml \
-    --data_dir ./Data \
-    --psf_path ./Data/PSF/psf_emLambda525_dxy0.0313_NA1.3.tif \
-    --output_dir ./outputs \
+    --data_dir Data \
+    --psf_path Data/PSF/psf_emLambda525_dxy0.0313_NA1.3.tif \
     --gpus 1
 ```
 
-3. **Monitor training**: View logs in TensorBoard:
+Resume training from checkpoint:
+
 ```bash
-tensorboard --logdir ./outputs/deconv_logs
+python train.py \
+    --config config.yaml \
+    --data_dir Data \
+    --psf_path Data/PSF/psf_emLambda525_dxy0.0313_NA1.3.tif \
+    --resume experiments/1219_1430/checkpoints/last.ckpt \
+    --gpus 1
 ```
 
 ### Inference
 
-Run inference on new images:
-```bash
-python infer.py \
-    --checkpoint ./outputs/deconv_logs/version_0/checkpoints/best.ckpt \
-    --input_dir ./Data/Inference \
-    --output_dir ./results \
-    --device cuda
-```
+Run inference on TIFF files:
 
-For large images, use tiling:
 ```bash
 python infer.py \
-    --checkpoint ./outputs/deconv_logs/version_0/checkpoints/best.ckpt \
-    --input_dir ./Data/Inference \
-    --output_dir ./results \
-    --tile_size 512 \
-    --overlap 64 \
+    --checkpoint experiments/1219_1430/final_model.ckpt \
+    --input_dir Data/Inference \
+    --output_dir Data/InferenceResult \
     --device cuda
 ```
 
 ## Configuration
 
-Key configuration parameters in `config.yaml`:
+Key parameters in `config.yaml`:
 
-### Model Parameters
-- `conv_block_num`: Number of U-Net blocks (default: 4)
-- `upsample_flag`: Whether to upsample output (default: true)
-- `insert_xy`: Padding size for network input (default: 16)
+### Model Configuration
+- `input_channels`: Input image channels (default: 1)
+- `output_channels`: Output image channels (default: 1)
+- `conv_block_num`: Number of encoder/decoder blocks (default: 4)
+- `conv_num`: Convolutions per block (default: 3)
+- `upsample_flag`: Enable 2x super-resolution (default: true)
+- `insert_xy`: Padding size (default: 16)
 
-### Loss Parameters
-- `hessian_weight`: Main regularization term (default: 0.02)
-- `tv_weight`: Total variation regularization (default: 0.0)
-- `use_mse`: Use MSE loss instead of MAE (default: false)
+### Loss Function
+- `tv_weight`: Total Variation regularization (default: 0.0)
+- `hessian_weight`: Hessian regularization (default: 0.02)
+- `l1_weight`: L1 regularization (default: 0.0)
+- `use_mse`: Use MSE instead of MAE (default: false)
 
 ### Training Parameters
-- `batch_size`: Training batch size (default: 4)
-- `patch_size`: Size of training patches (default: 128)
-- `lr`: Learning rate (default: 5e-5)
+- `lr`: Learning rate (default: 0.00005)
 - `max_epochs`: Maximum training epochs (default: 250)
+- `batch_size`: Training batch size (default: 4)
+- `patch_size`: Image patch size (default: 128)
 
-### PSF Parameters
-- `target_dx/dy`: Target sampling intervals in micrometers
-- `psf_dx/dy`: PSF sampling intervals (null = auto-detect)
+### PSF Configuration
+- `target_dx`: Target sampling interval x (default: 0.0313)
+- `target_dy`: Target sampling interval y (default: 0.0313)
 
-## Architecture
+## Data Format
 
-The implementation consists of:
+### Training Data
+Place TIFF files in `Data/Train/`. Both 2D and 3D TIFF files are supported.
 
-1. **DeconvUNet** (`src/models/deconv_unet.py`): Single-stage U-Net for deconvolution
-2. **PSFConvolutionLoss** (`src/losses/psf_loss.py`): PSF-based loss with regularization
-3. **DeconvDataModule** (`src/data/datamodule.py`): Data loading for 3D TIFF files
-4. **DeconvolutionLightningModule** (`src/models/lightning_module.py`): Training logic
-5. **PSFProcessor** (`src/utils/psf_utils.py`): PSF loading and processing
+### PSF Files
+PSF files should be in TIFF format and placed in `Data/PSF/`. The PSF will be automatically normalized and cropped for optimal computation.
 
-## Key Differences from Original
+### Output Format
+- Input: 512x512 (or any size)
+- Output: 1024x1024 (2x super-resolution when `upsample_flag=true`)
+- 3D files: Each z-slice processed independently
 
-1. **Removed denoising stage**: Only the second-stage deconvolution network is implemented
-2. **3D TIFF handling**: Each z-slice is processed independently as a 2D image
-3. **Modern framework**: Uses PyTorch Lightning for training
-4. **Flexible data format**: Supports various input configurations
+## Experiment Management
 
-## Advanced Usage
+Each training run creates a timestamped experiment folder:
+- Format: `experiments/MMDD_HHMM/` (e.g., `experiments/1219_1430/`)
+- Contains: checkpoints, logs, configuration, and final model
+- Prevents accidental overwriting of previous experiments
 
-### Custom Loss Functions
+## Hardware Requirements
 
-You can modify the loss function configuration:
-```yaml
-loss:
-  tv_weight: 0.01      # Add total variation regularization
-  hessian_weight: 0.02 # Hessian regularization (recommended)
-  l1_weight: 0.001     # L1 regularization on output
-```
+### Minimum
+- GPU: 4GB VRAM
+- RAM: 8GB
+- Storage: 10GB free space
 
-### Multi-GPU Training
-
-For multi-GPU training:
-```bash
-python train.py \
-    --config config.yaml \
-    --data_dir ./Data \
-    --psf_path ./Data/PSF/psf.tif \
-    --gpus 2
-```
-
-### Mixed Precision Training
-
-Enable mixed precision for faster training:
-```yaml
-trainer:
-  precision: 16  # Use 16-bit precision
-```
+### Recommended
+- GPU: 8GB+ VRAM (RTX 3070 or better)
+- RAM: 16GB+
+- Storage: 50GB+ for multiple experiments
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **CUDA out of memory**: Reduce batch size or patch size
-2. **PSF loading errors**: Check PSF file format and sampling intervals
-3. **Training instability**: Reduce learning rate or increase regularization
+1. **CUDA out of memory**: Reduce `batch_size` in config.yaml
+2. **No TIFF files found**: Check file paths and extensions (.tif/.tiff)
+3. **PSF loading errors**: Ensure PSF file is valid TIFF format
+4. **Import errors**: Verify all dependencies are installed
 
 ### Performance Tips
 
-1. Use SSD storage for faster data loading
-2. Increase `num_workers` for better data loading performance
-3. Use larger batch sizes if memory allows
-4. Enable mixed precision training for speed
+1. Use `--gpus 1` for GPU acceleration
+2. Adjust `num_workers` based on CPU cores
+3. Use SSD storage for faster data loading
+4. Monitor GPU memory usage during training
 
-## Output Format
+## Technical Details
 
-- Training outputs: Checkpoints and logs in `outputs/`
-- Inference outputs: Deconvolved images as `*_deconvolved.tif`
-- All outputs are saved as 16-bit TIFF files
+### Architecture
+- Based on original ZS-DeconvNet paper implementation
+- Modified to single-stage deconvolution (no denoising)
+- U-Net with skip connections and channel reduction in decoder
+- Final 2x upsampling for super-resolution
 
-## Citation
+### Loss Function
+- PSF convolution loss for physics-based deconvolution
+- Hessian regularization for smoothness
+- Optional Total Variation and L1 regularization
 
-This implementation is based on the ZS-DeconvNet paper. If you use this code, please cite the original work.
+### Data Processing
+- Percentile normalization (0-100th percentile to [0,1])
+- Random patch extraction during training
+- Data augmentation: rotation and flipping
+- Padding handling for network input/output

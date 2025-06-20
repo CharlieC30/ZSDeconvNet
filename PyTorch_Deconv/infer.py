@@ -27,7 +27,7 @@ def load_model(checkpoint_path, device='cpu'):
     print(f"Loading model from: {checkpoint_path}")
     
     # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     
     # Extract model configuration from various possible locations
     if 'hyper_parameters' in checkpoint:
@@ -134,9 +134,21 @@ def process_single_image(model, model_config, image_path, output_dir, device='cp
     # Save result
     output_path = output_dir / f"{Path(image_path).stem}_deconvolved.tif"
     
-    # Convert to uint16 for saving
-    result_uint16 = (prctile_norm(result) * 65535).astype(np.uint16)
+    # Convert to uint16 for saving with better handling
+    print(f"Before final normalization - min: {result.min():.6f}, max: {result.max():.6f}")
+    
+    # Use simple min-max normalization if prctile_norm fails
+    result_min, result_max = result.min(), result.max()
+    if result_max > result_min:
+        result_normalized = (result - result_min) / (result_max - result_min)
+    else:
+        result_normalized = np.zeros_like(result)
+        print("Warning: All output values are the same, creating zero image")
+    
+    result_uint16 = (result_normalized * 65535).astype(np.uint16)
     tifffile.imwrite(output_path, result_uint16)
+    
+    print(f"Saved uint16 range: {result_uint16.min()} - {result_uint16.max()}")
     
     print(f"Saved result to: {output_path}")
     return output_path
@@ -144,9 +156,12 @@ def process_single_image(model, model_config, image_path, output_dir, device='cp
 
 def process_slice_whole(model, slice_img, insert_xy, device):
     """Process a single slice without tiling."""
+    print(f"Input slice stats - min: {slice_img.min():.6f}, max: {slice_img.max():.6f}, mean: {slice_img.mean():.6f}")
+    
     # Normalize input like in training (percentile normalization)
     slice_norm = (slice_img - np.percentile(slice_img, 0)) / (np.percentile(slice_img, 100) - np.percentile(slice_img, 0) + 1e-7)
     slice_norm = np.clip(slice_norm, 0, 1)
+    print(f"Normalized input stats - min: {slice_norm.min():.6f}, max: {slice_norm.max():.6f}, mean: {slice_norm.mean():.6f}")
     
     # Add padding
     pad_width = ((insert_xy, insert_xy), (insert_xy, insert_xy))
@@ -154,13 +169,18 @@ def process_slice_whole(model, slice_img, insert_xy, device):
     
     # Convert to tensor
     input_tensor = torch.from_numpy(padded_img).unsqueeze(0).unsqueeze(0).to(device)
+    print(f"Input tensor shape: {input_tensor.shape}")
     
     # Run inference
     with torch.no_grad():
         output = model(input_tensor)
     
+    print(f"Model output shape: {output.shape}")
+    print(f"Model output stats - min: {output.min().item():.6f}, max: {output.max().item():.6f}, mean: {output.mean().item():.6f}")
+    
     # Convert back to numpy and crop to original scale
     result = output.squeeze().cpu().numpy()
+    print(f"Raw result stats - min: {result.min():.6f}, max: {result.max():.6f}, mean: {result.mean():.6f}")
     
     # Calculate crop coordinates to get 2x original size
     original_h, original_w = slice_img.shape
@@ -173,6 +193,7 @@ def process_slice_whole(model, slice_img, insert_xy, device):
     if crop_h > 0 or crop_w > 0:
         result = result[crop_h:crop_h + expected_h, crop_w:crop_w + expected_w]
     
+    print(f"Final result stats - min: {result.min():.6f}, max: {result.max():.6f}, mean: {result.mean():.6f}")
     return result
 
 

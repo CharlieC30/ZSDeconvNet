@@ -11,6 +11,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 import torch
+from datetime import datetime
 
 # Add src to path
 import sys
@@ -30,13 +31,14 @@ def load_config(config_path):
     return config
 
 
-def create_callbacks(config):
+def create_callbacks(config, experiment_dir):
     """Create training callbacks."""
     callbacks = []
     
     # Model checkpoint callback
     checkpoint_config = config.get('checkpoint', {})
     checkpoint_callback = ModelCheckpoint(
+        dirpath=experiment_dir / 'checkpoints',
         monitor=checkpoint_config.get('monitor', 'val_loss'),
         mode=checkpoint_config.get('mode', 'min'),
         save_top_k=checkpoint_config.get('save_top_k', 3),
@@ -72,8 +74,6 @@ def main():
                        help='Path to data directory')
     parser.add_argument('--psf_path', type=str, required=True,
                        help='Path to PSF file')
-    parser.add_argument('--output_dir', type=str, default='./outputs',
-                       help='Output directory for logs and checkpoints')
     parser.add_argument('--resume', type=str, default=None,
                        help='Path to checkpoint to resume from')
     parser.add_argument('--fast_dev_run', action='store_true',
@@ -89,9 +89,11 @@ def main():
     # Update paths in config
     config['psf_path'] = args.psf_path
     
-    # Create output directory
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Create timestamped experiment directory relative to script location
+    script_dir = Path(__file__).parent
+    timestamp = datetime.now().strftime("%m%d_%H%M")
+    experiment_dir = script_dir / 'experiments' / timestamp
+    experiment_dir.mkdir(parents=True, exist_ok=True)
     
     # Setup data module
     data_config = config.get('data', {})
@@ -107,15 +109,15 @@ def main():
     # Create model
     model = create_lightning_module(config)
     
-    # Setup logger
+    # Setup logger with timestamp
     logger = TensorBoardLogger(
-        save_dir=output_dir,
-        name='deconv_logs',
+        save_dir=experiment_dir,
+        name='logs',
         version=None
     )
     
     # Create callbacks
-    callbacks = create_callbacks(config)
+    callbacks = create_callbacks(config, experiment_dir)
     
     # Setup trainer
     trainer_config = config.get('trainer', {})
@@ -140,7 +142,7 @@ def main():
     print("Training Configuration:")
     print(f"Data directory: {args.data_dir}")
     print(f"PSF path: {args.psf_path}")
-    print(f"Output directory: {output_dir}")
+    print(f"Experiment directory: {experiment_dir}")
     print(f"Max epochs: {trainer_config.get('max_epochs', 100)}")
     print(f"Batch size: {data_config.get('batch_size', 4)}")
     print(f"Learning rate: {config['optimizer']['lr']}")
@@ -154,10 +156,16 @@ def main():
     else:
         trainer.fit(model, datamodule)
     
-    # Save final model
-    final_model_path = output_dir / 'final_model.ckpt'
+    # Save final model to experiment directory
+    final_model_path = experiment_dir / 'final_model.ckpt'
     trainer.save_checkpoint(final_model_path)
     print(f"Final model saved to: {final_model_path}")
+    
+    # Also save configuration for reference
+    config_save_path = experiment_dir / 'config.yaml'
+    with open(config_save_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False)
+    print(f"Configuration saved to: {config_save_path}")
     
     # Test the model
     if not args.fast_dev_run:
