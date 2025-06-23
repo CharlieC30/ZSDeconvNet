@@ -4,106 +4,257 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ZS-DeconvNet is a zero-shot learning tool for instant denoising and super-resolution in optical fluorescence microscopy. The repository provides three main implementations:
-
-1. **Python/MATLAB Implementation** (`Python_MATLAB_Codes/`) - Core training and inference
-2. **Fiji Plugin** (`Fiji_Plugin/`) - ImageJ/Fiji plugin for easy GUI usage  
-3. **PyTorch Implementation** (`PyTorch_Deconv/`) - Alternative PyTorch version
+ZS-DeconvNet is a self-supervised deep learning tool for simultaneous denoising and super-resolution in optical fluorescence microscopy. The project implements zero-shot learning that doesn't require paired training data.
 
 ## Architecture
 
-### Core Models
-- **2D ZS-DeconvNet**: Two-stage U-Net architecture for 2D deconvolution (`models/twostage_Unet.py`)
-- **3D ZS-DeconvNet**: 3D variant using RCAN architecture (`models/twostage_RCAN3D.py`, `models/twostage_Unet3D.py`)
-- Both models use a two-stage approach: first stage for denoising, second stage for deconvolution
+The codebase consists of three main implementations:
 
-### Key Components
-- **Data Augmentation**: MATLAB scripts in `data_augment_recorrupt_matlab/` for training data generation
-- **Loss Functions**: Custom loss combining MSE/MAE, deconvolution loss, and regularization terms (Hessian, TV, L1)
-- **PSF Integration**: Point Spread Function handling for deconvolution calculations
+1. **Python/TensorFlow**: Primary research implementation in `Python_MATLAB_Codes/train_inference_python/`
+2. **MATLAB**: Data preprocessing and PSF generation in `Python_MATLAB_Codes/data_augment_recorrupt_matlab/`
+3. **Fiji Plugin**: End-user plugin for ImageJ/Fiji in `Fiji_Plugin/`
+4. **PyTorch**: Alternative implementation in `PyTorch_Deconv/` (newer)
 
-## Development Commands
+## Environment Setup
 
-### Python Environment Setup
+### Python Environment
 ```bash
-# Create conda environment
 conda create -n zs-deconvnet python=3.9.7
 conda activate zs-deconvnet
-
-# Install dependencies (TensorFlow version)
 cd Python_MATLAB_Codes/train_inference_python
 pip install -r requirements.txt
+```
 
-# Install CUDA support
+### CUDA Dependencies
+```bash
 conda install cudatoolkit==11.3.1
 conda install cudnn==8.2.1
 ```
 
-### Training Models
-```bash
-# 2D training
-cd Python_MATLAB_Codes/train_inference_python
-bash train_demo_2D.sh
+## Core Implementation: train_inference_python Directory
 
-# 3D training
-bash train_demo_3D.sh
+### Main Training Scripts
 
-# SIM-specific training
-bash train_demo_2DSIM.sh
-bash train_demo_3DSIM.sh
+#### `Train_ZSDeconvNet_2D.py`
+- **Purpose**: 2D training for wide-field microscopy
+- **Model**: Two-stage U-Net (denoising + deconvolution)
+- **Key Parameters**:
+  - `--conv_block_num`: U-Net depth (default 4)
+  - `--conv_num`: Convolutions per block (default 3)
+  - `--upsample_flag`: Enable 2x super-resolution (0/1)
+  - `--iterations`: Training steps (typically 50000)
+  - `--start_lr`: Learning rate (typically 5e-5)
+
+#### `Train_ZSDeconvNet_2DSIM.py`
+- **Purpose**: 2D SIM (Structured Illumination Microscopy) training
+- **Differences**: Includes `augment_sim_img.py` for SIM-specific augmentation
+- **Data augmentation**: Random cropping, 8-fold rotation/flipping
+
+#### `Train_ZSDeconvNet_3D.py`
+- **Purpose**: 3D volumetric training (wide-field, confocal, LLS)
+- **Models**: Supports both `twostage_Unet3D` and `twostage_RCAN3D`
+- **Key Parameters**:
+  - `--insert_xy`: XY padding (default 8)
+  - `--insert_z`: Z padding (default 2)
+  - `--iterations`: Typically 10000 for 3D
+  - `--batch_size`: Usually 1-2 for memory constraints
+
+#### `Train_ZSDeconvNet_3DSIM.py`
+- **Purpose**: 3D SIM training with enhanced loss functions
+- **Architecture**: RCAN3D variants (standard, compact, compact2)
+
+### Inference Scripts
+
+#### `Infer_2D.py`
+- **Purpose**: 2D inference with patch-based processing
+- **Key Parameters**:
+  - `--num_seg_window_x/y`: Image segmentation for large images
+  - `--overlap_x/y`: Overlap between patches (avoid artifacts)
+  - `--bs`: Batch size tuple for multiple inputs
+- **Memory Management**: Automatic segmentation for large images
+
+#### `Infer_3D.py`
+- **Purpose**: 3D volumetric inference
+- **Segmentation**: 3D patch processing with overlap handling
+- **Output**: Saves both denoised and deconvolved results
+
+### Model Architecture Details
+
+#### `models/twostage_Unet.py` (2D)
+```python
+# Two-stage architecture:
+# Stage 1: Denoising (self-supervised)
+# Stage 2: Deconvolution (PSF-based)
+# 
+# Key components:
+# - Encoder: 4 downsampling blocks (conv_block_num=4)
+# - Decoder: 4 upsampling blocks with skip connections
+# - Optional: 2x upsampling for super-resolution
+# - Output cropping: Remove padding artifacts
 ```
 
-### Inference
-```bash
-# 2D inference
-bash infer_demo_2D.sh
-
-# 3D inference
-bash infer_demo_3D.sh
+#### `models/twostage_Unet3D.py` (3D)
+```python
+# 3D version differences:
+# - Conv3D, MaxPooling3D, UpSampling3D operations
+# - Z-axis pooling: (2,2,1) to preserve axial resolution
+# - Separate XY and Z padding parameters
 ```
 
-### Fiji Plugin Conversion
-```bash
-# Convert Python model to Fiji plugin format
-conda create -n tensorflow1 python=3.7
-conda activate tensorflow1
-cd Fiji_Plugin/TransferTFModelToPluginFormat
-pip install -r requirements.txt
-
-# For 2D models
-python TransferZSDeconv2DModelToPluginFormat.py
-
-# For 3D models  
-python TransferZSDeconv3DModelToPluginFormat.py
+#### `models/twostage_RCAN3D.py` (3D RCAN)
+```python
+# Residual Channel Attention Network variants:
+# - RCAN3D: Standard version
+# - RCAN3D_SIM: Enhanced for SIM with ReLU regularization
+# - RCAN3D_SIM_compact/compact2: Lightweight versions
+# 
+# Key components:
+# - RCAB: Residual Channel Attention Block
+# - ResidualGroup: Multiple RCAB blocks (n_RCAB=2-4)
+# - Channel Attention: Global pooling + squeeze-excitation
 ```
 
-## Key Parameters
+### Utilities Directory
 
-### Training Parameters
-- **2D Models**: patch_size=128, batch_size=4, epochs=250, lr=5e-5
-- **3D Models**: patch_size=64, batch_size=3, epochs=100, lr=1e-4
-- **Loss weights**: Hessian regularization (0.02 for 2D, 0.1 for 3D)
+#### `utils/loss.py` - Comprehensive Loss Functions
+```python
+# PSF-based losses:
+create_psf_loss()      # 2D PSF loss with regularization
+create_psf_loss_3D()   # 3D volumetric version
 
-### Data Requirements
-- Input images in `data_dir/folder/input/`
-- Ground truth in `data_dir/folder/gt/`
-- PSF files in .tif or .mrc format
-- Sampling intervals (dx, dy, dz) must match PSF
+# Self-supervised loss:
+create_NBR2NBR_loss()  # Neighbor2Neighbor approach
 
-### Model Files
-- TensorFlow 2.5.0 models saved as .h5 weights
-- Fiji plugin models in .zip format (SaveModelBundle)
-- Pre-trained models available via Google Drive links
+# Regularization terms:
+# - TV (Total Variation): Edge-preserving smoothness
+# - Hessian: Second-order derivative penalty  
+# - L1: Sparsity promotion
 
-## Data Structure
-- `Raw_Data/`: Original microscopy data (2D/3D, various modalities)
-- `saved_models/`: Pre-trained models organized by modality
-- Training data generated via MATLAB augmentation scripts
-- PSF files required for deconvolution loss calculation
+# PSF utilities:
+cal_psf_2d/3d()       # PSF calculation from OTF
+psf_estimator_2d/3d() # PSF parameter estimation
+```
 
-## Important Notes
-- TensorFlow GPU 2.5.0 required for training
-- Fiji plugin uses TensorFlow-Java 1.15.0
-- PSF normalization critical - divide by sum before use
-- 3D models require proper z-axis dimension mapping
-- Memory management via tiling for large images
+#### `utils/data_loader.py` - Data Loading
+```python
+# DataLoader with normalization options:
+# norm_flag=0: /65535 normalization
+# norm_flag=1: Percentile normalization (robust)
+# norm_flag=2: Max normalization
+```
+
+#### `utils/utils.py` - General Utilities
+```python
+prctile_norm()  # Percentile normalization (0-100 percentile)
+read_mrc()      # MRC file reader for OTF files
+```
+
+#### `utils/augment_sim_img.py` - SIM Data Augmentation
+```python
+aug_sim_img_2D/3D()  # SIM-specific augmentation
+augment_img()        # 8 augmentation modes (rotation, flipping)
+```
+
+### Shell Script Demos
+
+#### Training Demos
+- `train_demo_2D.sh`: Wide-field 2D with detailed parameter explanations
+- `train_demo_2DSIM.sh`: SIM-specific 2D training
+- `train_demo_3D.sh`: 3D volumetric examples
+- `train_demo_3DSIM.sh`: 3D SIM training
+
+#### Inference Demos  
+- `infer_demo_2D.sh`: Examples for WF, SIM modalities
+- `infer_demo_3D.sh`: LLS, Confocal, LLS-SIM examples
+
+### Training Workflow
+
+1. **Data Organization**:
+   ```
+   data_dir/folder/
+   ├── input/     # Corrupted training images
+   └── gt/        # Ground truth images
+   ```
+
+2. **PSF/OTF Setup**:
+   - PSF: `.tif` format (psf_src_mode=1)
+   - OTF: `.mrc` format (psf_src_mode=2)
+
+3. **Parameter Configuration**:
+   ```bash
+   python Train_ZSDeconvNet_2D.py \
+     --otf_or_psf_path 'path/to/psf.mrc' \
+     --data_dir 'path/to/training/data' \
+     --folder 'training_folder_name' \
+     --test_images_path 'path/to/test.tif' \
+     --psf_src_mode 2
+   ```
+
+4. **Loss Function Weights**:
+   - `--denoise_loss_weight`: Balance denoising vs deconvolution (0.5)
+   - `--TV_rate`: Total variation regularization (0-0.1)
+   - `--Hess_rate`: Hessian regularization (0.02-0.1)
+   - `--l1_rate`: L1 sparsity (typically 0)
+
+### Inference Workflow
+
+1. **Model Loading**: Load trained weights from `.h5` files
+2. **Image Segmentation**: Large images split into overlapping patches
+3. **Batch Processing**: Process patches according to `--bs` parameter
+4. **Result Fusion**: Combine patches with overlap handling
+5. **Output**: Saves to `load_weights_path/../Inference/`
+
+### Key Parameters by Modality
+
+#### 2D Wide-field:
+```bash
+--iterations 50000
+--batch_size 4
+--start_lr 5e-5
+--input_x 512 --input_y 512
+--insert_xy 8
+--denoise_loss_weight 0.5
+--TV_rate 0.01
+```
+
+#### 3D Wide-field/Confocal:
+```bash
+--iterations 10000
+--batch_size 1
+--start_lr 1e-4
+--input_x 128 --input_y 128 --input_z 32
+--insert_xy 8 --insert_z 2
+--TV_rate 0.1 --Hess_rate 0.02
+```
+
+#### SIM (2D/3D):
+```bash
+--augment_flag True
+--TV_rate 0.1
+--model_name 'RCAN3D_SIM' # for 3D SIM
+```
+
+### Monitoring and Output
+
+#### Training Monitoring:
+```bash
+tensorboard --logdir <save_weights_dir>/<save_weights_name>/graph
+```
+
+#### Output Structure:
+```
+saved_models/
+├── [experiment_name]/
+│   ├── saved_model/        # Model weights (.h5)
+│   ├── Inference/          # Inference results
+│   ├── graph/              # TensorBoard logs
+│   └── test_data/          # Test images
+```
+
+### Memory and Performance Tips
+
+- **Large Images**: Use `num_seg_window_x/y` parameters for segmentation
+- **Overlap**: Set `overlap_x/y` >= 16 pixels to avoid artifacts
+- **3D Processing**: Reduce `batch_size` to 1-2 for memory constraints
+- **GPU Memory**: Use `--gpu_memory_fraction` to limit usage
+- **Mixed Precision**: Enable with `--mixed_precision_training True`
