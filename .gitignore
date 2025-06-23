@@ -8,3 +8,4 @@ PyTorch_Deconv/src/losses/__pycache__
 PyTorch_Deconv/src/models/__pycache__
 PyTorch_Deconv/src/utils/__pycache__
 PyTorch_Deconv/experiments/*/
+Python_PSF/generated_psfs/*
