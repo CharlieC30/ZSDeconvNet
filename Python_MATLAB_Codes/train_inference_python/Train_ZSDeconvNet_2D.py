@@ -103,6 +103,7 @@ TV_rate = args.TV_rate
 Hess_rate = args.Hess_rate
 denoise_loss_weight = args.denoise_loss_weight
 
+# 設定環境跟路徑
 os.environ["TF_ENABLE_AUTO_MIXED_PRECISION"] = mixed_precision_training
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
 gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
@@ -163,6 +164,7 @@ optimizer_g = optimizers.Adam(learning_rate=start_lr, beta_1=0.9, beta_2=0.999)
 #                          calculate and process otf & psf
 # --------------------------------------------------------------------------------
 
+# 根據psf_src_mode選擇使用psf或otf，psf_src_mode=1表示使用psf，2表示使用otf
 if psf_src_mode==1:
     print('using psf...')
     psf_g = np.float32(imageio.imread(args.otf_or_psf_path))
@@ -252,6 +254,7 @@ psf_width = psf_g.shape[0]
 psf_height = psf_g.shape[1]
 
 # crop PSF for faster computation
+# 裁減PSF以加快後續的卷積運算，會根據PSF的大小和sigma值來決定裁減的大小
 sigma_y, sigma_x = psf_estimator_2d(psf_g)
 ksize = int(sigma_y * 4)
 halfx = psf_width // 2
@@ -264,6 +267,7 @@ else:
 psf_g = psf_g/np.sum(psf_g)
     
 # save
+# 先正規化PSF，轉成uint16，儲存成.tif文件
 psf_g_tosave = np.uint16(65535*prctile_norm(np.squeeze(psf_g)))
 imageio.imwrite(save_weights_path+'psf.tif',psf_g_tosave)
 otf_g_tosave = np.uint16(65535*prctile_norm(np.squeeze(np.abs(otf_g))))
@@ -273,6 +277,8 @@ imageio.imwrite(save_weights_path+'otf.tif',otf_g_tosave)
 #                                 compile model
 # --------------------------------------------------------------------------------
 
+# g 用於訓練的模型，p 用於測試的模型
+# modelFN 就是 twostage_Unet.Unet 函數
 g = modelFN((input_y+2*insert_xy, input_x+2*insert_xy, 1),
             upsample_flag=upsample_flag, insert_x=insert_xy, insert_y=insert_xy)
 p = modelFN((input_y_test+2*insert_xy_test, input_x_test+2*insert_xy_test, 1),
@@ -291,6 +297,7 @@ if mse_flag:
 else:
     loss = ['mean_absolute_error',loss]
 
+# compile models 編譯模型，將模型 g、損失函數 loss 和優化器 optimizer_g (Adam) 綁定在一起
 g.compile(loss=loss, loss_weights=[denoise_loss_weight,1-denoise_loss_weight], optimizer=optimizer_g)
 p.compile(loss=None, optimizer=optimizer_g)
 
@@ -388,15 +395,18 @@ curlr = start_lr
 avg_validate_time = []
 
 for it in range(iterations-load_init_model_iter):
+    # 載入訓練資料
     [input_g, gt_g] = cur_data_loader(images_path, train_images_path, train_gt_path, 
                                     batch_size, norm_flag=0)
     input_g = np.reshape(input_g, (batch_size, input_x, input_y, 1), order='F')
     gt_g = np.reshape(gt_g, (batch_size, input_x, input_y, 1), order='F')
     insert_x = np.zeros([batch_size,insert_xy,input_x,1])
     insert_y = np.zeros([batch_size,input_y+2*insert_xy,insert_xy,1])
+    # 對資料進行 padding，避免卷積運算在影像邊緣產生不好的結果
     input_g = np.concatenate((insert_x,input_g,insert_x),axis=1)
     input_g = np.concatenate((insert_y,input_g,insert_y),axis=2)
     
+    # 訓練模型
     loss_generator = g.train_on_batch(x=input_g, y=[gt_g,gt_g])
     
     loss_record.append(loss_generator[1])
@@ -405,6 +415,7 @@ for it in range(iterations-load_init_model_iter):
     elapsed_time = datetime.datetime.now() - start_time
     print("%d it: time: %s, denoise_loss = %.3e, deconv_loss = %.3e" % (it + 1 + load_init_model_iter, elapsed_time, loss_generator[1], loss_generator[2]))
     
+    # 驗證、測試和儲存模型
     if (it + 1+load_init_model_iter) % valid_interval == 0 or it == 0:
         images_path = glob.glob(train_images_path + '/*')
         print('validate time:')

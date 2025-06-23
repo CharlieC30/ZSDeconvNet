@@ -1,12 +1,13 @@
 import numpy as np
 
-
+# 百分位數正規化
 def prctile_norm(x, min_prc=0, max_prc=100):
     y = (x-np.percentile(x, min_prc))/(np.percentile(x, max_prc)-np.percentile(x, min_prc)+1e-7)
     y[y > 1] = 1
     y[y < 0] = 0
     return y
 
+# 用於讀取 MRC (Medical Research Council) 格式的檔案。MRC 是一種在電子顯微鏡和斷層掃描領域常見的格式
 def read_mrc(filename, filetype='image'):
     rec_header_dtd = \
     [

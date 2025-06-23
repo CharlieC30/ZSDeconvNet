@@ -10,9 +10,11 @@ import os
 import tensorflow as tf
 import math
 
+# 將大圖分塊 (segmentation)、對每個小塊進行推論 (prediction)，然後再將結果拼接 (fusing)
+# GPU 設定 
 os.environ["TF_ENABLE_AUTO_MIXED_PRECISION"] = '1'
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0)
+gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0) # 將 GPU 記憶體使用率設定為 0，代表程式不會用 GPU 推論
 tf.compat.v1.Session(config=tf.compat.v1.compat.v1.ConfigProto(gpu_options=gpu_options))
 
 parser = argparse.ArgumentParser()
@@ -67,16 +69,18 @@ for tif_ind in range(num_tif):
     image_name = 'img'+str(tif_ind)
     if 'tif' in path[tif_ind]:
         image = tiff.imread(path[tif_ind]).astype('float')
-    else:
+    else: # 處理 .mrc 檔案
         header,image = read_mrc(path[tif_ind])
         image = image.astype('float')
         image = image.transpose((1,0))
-    image[image<0] = 0
-    image = prctile_norm(image)
+    image[image<0] = 0 # 將負值設為 0
+    image = prctile_norm(image) # 正規化到 0-1 範圍
         
     inp_x,inp_y = image.shape
+    # 計算每個分塊的尺寸 (seg_window_x, seg_window_y)
     seg_window_x[tif_ind]=math.ceil((inp_x+(num_seg_window_x[tif_ind]-1)*overlap_x[tif_ind])/num_seg_window_x[tif_ind])
     seg_window_y[tif_ind]=math.ceil((inp_y+(num_seg_window_y[tif_ind]-1)*overlap_y[tif_ind])/num_seg_window_y[tif_ind])
+    # 動態計算每個分塊需要額外填充的邊緣大小 (insert_x, insert_y)
     conv_block_num = 4
     n = math.ceil(seg_window_x[tif_ind]/2**conv_block_num)
     while 16*n-seg_window_x[tif_ind]<2*insert_xy:
@@ -90,6 +94,7 @@ for tif_ind in range(num_tif):
     # segment
     segmented_inp = []
 
+    # 計算分塊的起始位置 (rr_list, cc_list) rr_list 和 cc_list 包含了每個分塊的起始座標
     rr_list = list(range(0,inp_x-seg_window_x[tif_ind]+1,seg_window_x[tif_ind]-overlap_x[tif_ind]))
     if rr_list[-1] != inp_x-seg_window_x[tif_ind]:
         rr_list.append(inp_x-seg_window_x[tif_ind])
@@ -118,22 +123,27 @@ for tif_ind in range(num_tif):
         last_bs = cur_bs
     
     # predict
+    # 建立模型實例，並載入權重
     p = modelFN_generator([seg_window_x[tif_ind]+2*insert_x,seg_window_y[tif_ind]+2*insert_y,1], upsample_flag=upsample_flag, insert_x=insert_x, insert_y=insert_y)
-    p.compile(loss=None, optimizer=optimizer_g)
+    p.compile(loss=None, optimizer=optimizer_g) # 推論時損失函數不重要，設為 None
     p.load_weights(load_weights_path)
         
     dec_list = np.zeros([seg_num,seg_window_x[tif_ind]*(1+upsample_flag),seg_window_y[tif_ind]*(1+upsample_flag)], dtype=np.float32)
     den_list = np.zeros([seg_num,seg_window_x[tif_ind],seg_window_y[tif_ind]], dtype=np.float32)
     for batch_ind_start in bs_list:
+        # 逐批次進行預測
         if batch_ind_start == bs_list[-1]:
             print('predicting patches %03d'%(batch_ind_start+1)+'-%03d'%(batch_ind_start+last_bs)+' out of '+'%03d'%(seg_num))
             pred = p.predict(segmented_inp[batch_ind_start:batch_ind_start+last_bs,...])
         else:
             print('predicting patches %03d'%(batch_ind_start+1)+'-%03d'%(batch_ind_start+cur_bs)+' out of '+'%03d'%(seg_num))
             pred = p.predict(segmented_inp[batch_ind_start:batch_ind_start+cur_bs,...])
+        
+        # 處理預測結果 (去噪和去卷積輸出)
         pred1 = np.squeeze(pred[0],axis=3).astype(np.float32)
-        den_list[batch_ind_start:batch_ind_start+pred1.shape[0],...]=pred1
-        pred2 = np.squeeze(pred[1],axis=3).astype(np.float32)
+        den_list[batch_ind_start:batch_ind_start+pred1.shape[0],...]=pred1 # 去噪輸出
+        pred2 = np.squeeze(pred[1],axis=3).astype(np.float32) # 去卷積輸出
+        # 裁剪去卷積輸出，去除模型內部填充的邊緣
         pred2 = pred2[:,insert_x*(1+upsample_flag):(seg_window_x[tif_ind]+insert_x)*(1+upsample_flag),
                       insert_y*(1+upsample_flag):(seg_window_y[tif_ind]+insert_y)*(1+upsample_flag)]
         dec_list[batch_ind_start:batch_ind_start+pred1.shape[0],...]=pred2

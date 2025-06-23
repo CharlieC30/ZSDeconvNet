@@ -9,7 +9,10 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import initializers
 import tensorflow as tf
 
-
+# upsample_flag: 一個布林值 (0 或 1)，決定第二階段是否進行 2 倍的超解析度上採樣
+# insert_x, insert_y: 裁剪第一階段的輸出 output1 由於輸入影像在送入模型前會先 padding，這裡將 output1 裁剪回原始的有效區域大小
+# conv_block_num: U-Net 中編碼器和解碼器的下採樣/上採樣區塊數量 (預設 4)
+# conv_num: 每個卷積區塊中包含的卷積層數量 (預設 3)
 def Unet(input_shape,upsample_flag,insert_x,insert_y,conv_block_num=4,conv_num=3):
     
     inputs = Input(input_shape)
@@ -24,6 +27,7 @@ def Unet(input_shape,upsample_flag,insert_x,insert_y,conv_block_num=4,conv_num=3
         pool, conv = conv_block(pool, conv_num, channels)
         conv_list.append(conv)
 
+    # 中間層 Bottleneck
     mid = Conv2D(channels*2, kernel_size=3, activation='relu', padding='same')(pool)
     mid = Conv2D(channels, kernel_size=3, activation='relu', padding='same')(mid)
     
@@ -38,6 +42,7 @@ def Unet(input_shape,upsample_flag,insert_x,insert_y,conv_block_num=4,conv_num=3
     #output denoised img
     output1 = Conv2D(1, kernel_size=3, activation='relu', padding='same')(conv)
 
+    # 第二階段 (Deconvolution / Super-resolution) 
     #Encoder
     pool = output1
     conv_list = []
@@ -76,6 +81,7 @@ def conv_block(input_layer, conv_num, channels):
     return pool, conv
 
 def concat_block(concat1, concat2, conv_num, channels):
+    # 將上採樣後的結果與來自編碼器的跳躍連接 concat2 沿著通道軸 (axis=3) 拼接起來。
     up = concatenate([UpSampling2D(size=(2, 2))(concat1), concat2], axis=3)
     conv = Conv2D(channels, kernel_size=3, activation='relu', padding='same')(up)
     for _ in range(conv_num-1):

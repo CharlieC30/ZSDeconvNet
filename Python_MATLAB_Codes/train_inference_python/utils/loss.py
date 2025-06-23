@@ -11,6 +11,7 @@ import math
 def create_psf_loss(psf, TV_weight, Hess_weight, laplace_weight,
                     l1_rate, mse_flag,  
                     upsample_flag, insert_xy, deconv_flag):
+    # y_pred 是模型的輸出，y_true 是真實的標籤，把 y_pred 用 PSF 卷積後的結果與 y_true 比較
     def psf_loss(y_true, y_pred):
         
         _,height,width,_ = y_pred.get_shape().as_list()
@@ -18,9 +19,12 @@ def create_psf_loss(psf, TV_weight, Hess_weight, laplace_weight,
         y_true = tf.cast(y_true, tf.float32)
         if deconv_flag:
             psf_local = psf
+            # 重新模糊 (Re-blur)
             y_conv = K.conv2d(y_pred, psf_local, padding='same')
         else:
             y_conv = y_pred
+        # 處理尺寸 (Upsampling & Cropping)
+        # 如果模型進行超解析 (upsample_flag=1)，y_conv 的尺寸會是 y_true 的兩倍，需要先 tf.image.resize 將其縮小回原始尺寸，才能進行比較
         if upsample_flag:
             y_conv = tf.image.resize(y_conv,[height//2,width//2])
         y_conv = y_conv[:,insert_xy:y_conv.shape[1]-insert_xy,insert_xy:y_conv.shape[2]-insert_xy,:]
@@ -28,7 +32,8 @@ def create_psf_loss(psf, TV_weight, Hess_weight, laplace_weight,
             psf_loss = K.mean(K.square(y_true - y_conv))
         else:
             psf_loss = K.mean(K.abs(y_true - y_conv))
-        
+        # Regularization 正則化
+        # TV_weight (Total Variation Loss): 計算相鄰像素間的差異。抑制雜訊，讓結果更平滑
         if TV_weight>0 or laplace_weight>0:
             y = tf.slice(y_pred, [0, 0, 0, 0], tf.stack([-1, height-1, -1, -1])) - tf.slice(y_pred, [0, 1, 0, 0], [-1, -1, -1, -1])
             x = tf.slice(y_pred, [0, 0, 0, 0], tf.stack([-1, -1, width-1, -1])) - tf.slice(y_pred, [0, 0, 1, 0], [-1, -1, -1, -1])
@@ -37,7 +42,7 @@ def create_psf_loss(psf, TV_weight, Hess_weight, laplace_weight,
             TV_loss = x_diff + y_diff
         else:
             TV_loss = 0
-            
+        # Hess_weight (Hessian Loss): 計算梯度的梯度（二階導數）。懲罰細小的、線條狀的偽影，保持結構的連續性和平滑性
         if Hess_weight>0:
             if not TV_weight>0:
                 y = tf.slice(y_pred, [0, 0, 0, 0], tf.stack([-1, height-1, -1, -1])) - tf.slice(y_pred, [0, 1, 0, 0], [-1, -1, -1, -1])
@@ -57,13 +62,13 @@ def create_psf_loss(psf, TV_weight, Hess_weight, laplace_weight,
             laplace_loss = K.mean(K.square(laplace_loss))
         else:
             laplace_loss = 0
-            
+        # l1_rate (L1 Loss): 計算影像像素值的絕對值總和。鼓勵模型產生稀疏的結果（更多像素值為 0），有助於去除背景的低強度雜訊
         if l1_rate>0:
             l1_loss = K.mean(K.abs(y_pred))
         else:
             l1_loss = 0
 
-        return psf_loss+TV_weight*TV_loss+laplace_weight*laplace_loss+Hess_weight*Hess_loss+l1_rate*l1_loss
+        return psf_loss + TV_weight*TV_loss + laplace_weight*laplace_loss + Hess_weight*Hess_loss + l1_rate*l1_loss
     return psf_loss
 
 def create_NBR2NBR_loss(TV_rate,mse_flag):
