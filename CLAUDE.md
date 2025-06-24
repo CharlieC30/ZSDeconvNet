@@ -13,14 +13,13 @@ The codebase consists of three main implementations:
 1. **Python/TensorFlow**: Primary research implementation in `Python_MATLAB_Codes/train_inference_python/`
 2. **MATLAB**: Data preprocessing and PSF generation in `Python_MATLAB_Codes/data_augment_recorrupt_matlab/`
 3. **Fiji Plugin**: End-user plugin for ImageJ/Fiji in `Fiji_Plugin/`
-4. **PyTorch**: Alternative implementation in `PyTorch_Deconv/` (newer)
+4. **PyTorch**: Alternative implementation in `PyTorch_Deconv/` (newer, pure deconvolution only)
 
 ## Environment Setup
 
 ### Python Environment
 ```bash
-conda create -n zs-deconvnet python=3.9.7
-conda activate zs-deconvnet
+conda activate zs-deconvnet_pytorch
 cd Python_MATLAB_Codes/train_inference_python
 pip install -r requirements.txt
 ```
@@ -258,3 +257,49 @@ saved_models/
 - **3D Processing**: Reduce `batch_size` to 1-2 for memory constraints
 - **GPU Memory**: Use `--gpu_memory_fraction` to limit usage
 - **Mixed Precision**: Enable with `--mixed_precision_training True`
+
+# PyTorch Lightning Pure Deconvolution Implementation
+
+## Current Task (2025-01-24)
+**User Requirements**: Convert TensorFlow version to PyTorch Lightning, keeping **only deconvolution** (remove denoising stage).
+
+### Working Environment
+- **Working Directory**: `/home/aero/charliechang/projects/ZS-DeconvNet/`
+- **Conda Environment**: `zs-deconvnet_pytorch`
+- **Code Location**: `PyTorch_Deconv/`
+
+### Data Structure
+```
+PyTorch_Deconv/Data/
+├── Train/                  # Training data (3D TIFF stacks)
+│   ├── DPM4Xsample_2070.tif
+│   └── THXsample_2070.tif
+├── PSF/                    # Point Spread Function
+│   └── psf_emLambda525_dxy0.0313_NA1.3.tif
+├── Inference/              # Inference input
+└── InferenceResult/        # Output results
+```
+
+### Training Logic (Self-Supervised Deconvolution)
+```
+Blurred Image (input) → U-Net → Clear Image (prediction) → PSF Convolution → Re-blurred Image → Compare with Original Blurred Image (target)
+```
+- **Key Insight**: input = target = original blurred image (self-supervised)
+- **Learning Goal**: Model learns blur → clear inverse mapping
+- **No paired data needed**: Only original blurred microscopy images
+
+### Inference Logic
+```
+3D TIFF Blurred Image → Slice-by-slice Processing → 2x Super-resolution Clear Image → Save as *_deconvolved.tif
+```
+
+### Current Issues to Fix
+1. **PSF Loss Cropping Bug**: Incorrect tensor cropping causing all-black outputs
+2. **Output Size Handling**: Ensure proper 2x super-resolution output
+3. **Configuration**: Set max_epochs=100 for initial testing
+
+### Critical Implementation Details
+- **Pure Deconvolution**: Based on TensorFlow version's second stage only
+- **Self-Supervised**: input=target is CORRECT for deconvolution learning
+- **PSF-Constrained**: Physics-based learning using known microscope PSF
+- **2x Super-Resolution**: Simultaneously deblur and upscale
