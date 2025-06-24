@@ -210,7 +210,7 @@ class DeconvDataModule(pl.LightningDataModule):
         
         # Dataset paths
         self.train_input_dir = os.path.join(data_dir, 'Train')
-        self.inference_input_dir = os.path.join(data_dir, 'Inference')
+        self.inference_input_dir = os.path.join(data_dir, 'InferenceInput')
         
     def setup(self, stage: Optional[str] = None):
         """Setup datasets for training, validation, and testing."""
@@ -251,21 +251,6 @@ class DeconvDataModule(pl.LightningDataModule):
                 augment=False
             )
         
-        if stage == 'test' or stage == 'predict':
-            # Setup inference dataset
-            inference_files = glob.glob(os.path.join(self.inference_input_dir, '*.tif'))
-            inference_files.extend(glob.glob(os.path.join(self.inference_input_dir, '*.tiff')))
-            inference_files = sorted(inference_files)
-            
-            if len(inference_files) == 0:
-                raise ValueError(f"No TIFF files found in {self.inference_input_dir}")
-            
-            self.test_dataset = TiffSliceDataset(
-                inference_files, inference_files,  # Use same files for input and target
-                patch_size=self.patch_size,
-                insert_xy=self.insert_xy,
-                augment=False
-            )
     
     def train_dataloader(self):
         return DataLoader(
@@ -287,92 +272,7 @@ class DeconvDataModule(pl.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False
         )
     
-    def test_dataloader(self):
-        return DataLoader(
-            self.test_dataset,
-            batch_size=1,  # Process one image at a time for inference
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=True
-        )
-    
-    def predict_dataloader(self):
-        return self.test_dataloader()
 
 
-class InferenceDataset(Dataset):
-    """
-    Dataset for inference on full images (not patches).
-    """
-    
-    def __init__(self, image_paths: List[str], insert_xy: int = 16):
-        self.image_paths = image_paths
-        self.insert_xy = insert_xy
-        
-    def __len__(self):
-        return len(self.image_paths)
-    
-    def __getitem__(self, idx):
-        img_path = self.image_paths[idx]
-        img = tifffile.imread(img_path).astype(np.float32)
-        
-        # Normalize
-        img = self._normalize_image(img)
-        
-        # If 3D, we'll process each slice
-        if len(img.shape) == 3:
-            # Process all slices
-            slices = []
-            for i in range(img.shape[0]):
-                slice_img = img[i]
-                slice_padded = self._add_padding(slice_img)
-                slice_tensor = torch.from_numpy(slice_padded).unsqueeze(0)
-                slices.append(slice_tensor)
-            
-            # Stack slices
-            img_tensor = torch.stack(slices, dim=0)  # Shape: (num_slices, 1, H+2*pad, W+2*pad)
-        else:
-            # 2D image
-            img_padded = self._add_padding(img)
-            img_tensor = torch.from_numpy(img_padded).unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, H+2*pad, W+2*pad)
-        
-        return img_tensor, img_path
-    
-    def _normalize_image(self, img):
-        """Normalize image using percentile normalization."""
-        min_val = np.percentile(img, 0)
-        max_val = np.percentile(img, 100)
-        normalized = (img - min_val) / (max_val - min_val + 1e-7)
-        normalized = np.clip(normalized, 0, 1)
-        return normalized
-    
-    def _add_padding(self, img):
-        """Add padding around image."""
-        pad_width = ((self.insert_xy, self.insert_xy), (self.insert_xy, self.insert_xy))
-        return np.pad(img, pad_width, mode='constant', constant_values=0)
 
 
-if __name__ == "__main__":
-    # Test the DataModule
-    data_dir = "/home/aero/charliechang/projects/ZS-DeconvNet/PyTorch_Deconv/Data"
-    
-    dm = DeconvDataModule(
-        data_dir=data_dir,
-        batch_size=2,
-        patch_size=128,
-        insert_xy=16
-    )
-    
-    # Setup for training
-    dm.setup('fit')
-    
-    # Test train dataloader
-    train_loader = dm.train_dataloader()
-    print(f"Number of training batches: {len(train_loader)}")
-    
-    # Get a sample batch
-    for batch in train_loader:
-        input_batch, target_batch = batch
-        print(f"Input batch shape: {input_batch.shape}")
-        print(f"Target batch shape: {target_batch.shape}")
-        break

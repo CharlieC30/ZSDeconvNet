@@ -11,6 +11,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 import torch
+from datetime import datetime
 
 # Add src to path
 import sys
@@ -107,11 +108,19 @@ def main():
     # Create model
     model = create_lightning_module(config)
     
-    # Setup logger
+    # Setup logger with date-time naming
+    now = datetime.now()
+    version_name = now.strftime("%m%d_%H%M")
+    
+    # Handle potential conflicts (add seconds if needed)
+    log_dir = output_dir / 'deconv_logs' / version_name
+    if log_dir.exists():
+        version_name = now.strftime("%m%d_%H%M_%S")
+    
     logger = TensorBoardLogger(
         save_dir=output_dir,
         name='deconv_logs',
-        version=None
+        version=version_name
     )
     
     # Create callbacks

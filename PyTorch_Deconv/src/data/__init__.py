@@ -1,3 +1,3 @@
-from .datamodule import DeconvDataModule, TiffSliceDataset, InferenceDataset
+from .datamodule import DeconvDataModule, TiffSliceDataset
 
-__all__ = ['DeconvDataModule', 'TiffSliceDataset', 'InferenceDataset']
+__all__ = ['DeconvDataModule', 'TiffSliceDataset']

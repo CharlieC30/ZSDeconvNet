@@ -145,52 +145,7 @@ class DeconvolutionLightningModule(pl.LightningModule):
         
         return val_loss
     
-    def test_step(self, batch, batch_idx):
-        """Test step."""
-        input_imgs, target_imgs = batch
-        
-        # Forward pass
-        predictions = self.forward(input_imgs)
-        
-        # Compute loss
-        test_loss = self.loss_fn(predictions, target_imgs)
-        
-        # Log metrics
-        self.log('test_loss', test_loss, on_step=False, on_epoch=True)
-        
-        return test_loss
     
-    def predict_step(self, batch, batch_idx):
-        """Prediction step for inference."""
-        if len(batch) == 2:
-            input_imgs, img_paths = batch
-        else:
-            input_imgs = batch
-            img_paths = None
-        
-        # Handle different input shapes
-        if input_imgs.dim() == 5:  # (batch, slices, channels, height, width)
-            # Process each slice independently
-            batch_size, num_slices = input_imgs.shape[:2]
-            predictions = []
-            
-            for b in range(batch_size):
-                slice_preds = []
-                for s in range(num_slices):
-                    slice_input = input_imgs[b, s:s+1]  # (1, channels, height, width)
-                    slice_pred = self.forward(slice_input)
-                    slice_preds.append(slice_pred)
-                
-                # Stack predictions
-                vol_pred = torch.stack(slice_preds, dim=1)  # (1, slices, channels, height, width)
-                predictions.append(vol_pred)
-            
-            predictions = torch.cat(predictions, dim=0)
-        else:
-            # Regular 2D prediction
-            predictions = self.forward(input_imgs)
-        
-        return predictions, img_paths
     
     def configure_optimizers(self):
         """Configure optimizers and learning rate schedulers."""
@@ -358,36 +313,3 @@ def create_lightning_module(config):
     )
 
 
-if __name__ == "__main__":
-    # Test the Lightning module
-    config = {
-        'model': {
-            'input_channels': 1,
-            'output_channels': 1,
-            'conv_block_num': 4,
-            'conv_num': 3,
-            'upsample_flag': True,
-            'insert_xy': 16
-        },
-        'loss': {
-            'tv_weight': 0.0,
-            'hessian_weight': 0.02,
-            'l1_weight': 0.0,
-            'use_mse': False,
-            'upsample_flag': True,
-            'insert_xy': 16
-        },
-        'optimizer': {
-            'lr': 5e-5,
-            'weight_decay': 1e-5
-        },
-        'psf_path': '/path/to/psf.tif',  # Update this
-        'psf': {
-            'target_dx': 0.0313,
-            'target_dy': 0.0313
-        }
-    }
-    
-    # Create module
-    module = create_lightning_module(config)
-    print(f"Created Lightning module with {sum(p.numel() for p in module.parameters())} parameters")

@@ -18,7 +18,6 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.models.lightning_module import DeconvolutionLightningModule
-from src.data.datamodule import InferenceDataset
 from src.utils.psf_utils import prctile_norm
 
 
@@ -33,6 +32,16 @@ def load_model(checkpoint_path, device='cpu'):
     if 'hyper_parameters' in checkpoint:
         hyper_params = checkpoint['hyper_parameters']
         model_config = hyper_params.get('model_config')
+        if model_config is None:
+            # Try to extract from other hyper_parameters
+            model_config = {
+                'input_channels': hyper_params.get('input_channels', 1),
+                'output_channels': hyper_params.get('output_channels', 1),
+                'conv_block_num': hyper_params.get('conv_block_num', 4),
+                'conv_num': hyper_params.get('conv_num', 3),
+                'upsample_flag': hyper_params.get('upsample_flag', True),
+                'insert_xy': hyper_params.get('insert_xy', 16)
+            }
     else:
         model_config = checkpoint.get('model_config')
     
@@ -48,28 +57,61 @@ def load_model(checkpoint_path, device='cpu'):
         }
         print("Warning: Using default model configuration")
     
-    # For inference, we only need the U-Net model, not the Lightning module
-    from src.models.deconv_unet import DeconvUNet
-    model = DeconvUNet(**model_config)
-    
-    # Load state dict - only load model weights
-    if 'state_dict' in checkpoint:
-        state_dict = checkpoint['state_dict']
-    else:
-        state_dict = checkpoint
-    
-    # Extract only model weights (remove 'model.' prefix)
-    model_state_dict = {}
-    for key, value in state_dict.items():
-        if key.startswith('model.'):
-            new_key = key[6:]  # Remove 'model.' prefix
-            model_state_dict[new_key] = value
-    
-    model.load_state_dict(model_state_dict)
-    model.eval()
-    model.to(device)
-    
-    return model, model_config
+    # Load the full Lightning module instead of just the U-Net
+    try:
+        from src.models.lightning_module import DeconvolutionLightningModule
+        model = DeconvolutionLightningModule.load_from_checkpoint(
+            checkpoint_path, 
+            map_location=device,
+            strict=False
+        )
+        print("Successfully loaded Lightning module")
+        model.eval()
+        model.to(device)
+        
+        # Extract model config from the loaded model
+        if hasattr(model, 'model_config'):
+            model_config = model.model_config
+        else:
+            model_config = model.hparams.get('model_config', model_config)
+        
+        return model, model_config
+        
+    except Exception as e:
+        print(f"Failed to load Lightning module: {e}")
+        print("Falling back to manual U-Net loading...")
+        
+        # Fallback to original method
+        from src.models.deconv_unet import DeconvUNet
+        model = DeconvUNet(**model_config)
+        
+        # Load state dict - only load model weights
+        if 'state_dict' in checkpoint:
+            state_dict = checkpoint['state_dict']
+        else:
+            state_dict = checkpoint
+        
+        # Extract only model weights (remove 'model.' prefix)
+        model_state_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith('model.'):
+                new_key = key[6:]  # Remove 'model.' prefix
+                model_state_dict[new_key] = value
+        
+        # Load weights
+        try:
+            model.load_state_dict(model_state_dict)
+            print("Successfully loaded model weights")
+        except Exception as e:
+            print(f"Error loading model weights: {e}")
+            # Try alternative loading method
+            print("Trying alternative loading method...")
+            model.load_state_dict(model_state_dict, strict=False)
+        
+        model.eval()
+        model.to(device)
+        
+        return model, model_config
 
 
 def process_single_image(model, model_config, image_path, output_dir, device='cpu', 
@@ -90,9 +132,6 @@ def process_single_image(model, model_config, image_path, output_dir, device='cp
     
     # Load image
     img = tifffile.imread(image_path).astype(np.float32)
-    
-    # Normalize
-    img = prctile_norm(img)
     
     # Handle 2D vs 3D
     if len(img.shape) == 2:
@@ -134,18 +173,29 @@ def process_single_image(model, model_config, image_path, output_dir, device='cp
     # Save result
     output_path = output_dir / f"{Path(image_path).stem}_deconvolved.tif"
     
-    # Convert to uint16 for saving
-    result_uint16 = (prctile_norm(result) * 65535).astype(np.uint16)
+    print(f"Result shape: {result.shape}, range: [{result.min():.4f}, {result.max():.4f}]")
+    
+    # Convert to uint16 for saving - use consistent normalization
+    if result.max() > result.min():
+        # Percentile normalization
+        result_norm = prctile_norm(result)
+        result_uint16 = (result_norm * 65535).astype(np.uint16)
+    else:
+        print("Warning: Result has no dynamic range - might be all zeros!")
+        result_uint16 = (result * 65535).astype(np.uint16)
+    
     tifffile.imwrite(output_path, result_uint16)
     
-    print(f"Saved result to: {output_path}")
+    print(f"Saved to: {output_path}")
     return output_path
 
 
 def process_slice_whole(model, slice_img, insert_xy, device):
     """Process a single slice without tiling."""
-    # Normalize input like in training (percentile normalization)
-    slice_norm = (slice_img - np.percentile(slice_img, 0)) / (np.percentile(slice_img, 100) - np.percentile(slice_img, 0) + 1e-7)
+    # Apply exact same normalization as training (matching datamodule._normalize_image)
+    min_val = np.percentile(slice_img, 0)
+    max_val = np.percentile(slice_img, 100)
+    slice_norm = (slice_img - min_val) / (max_val - min_val + 1e-7)
     slice_norm = np.clip(slice_norm, 0, 1)
     
     # Add padding
@@ -168,8 +218,9 @@ def process_slice_whole(model, slice_img, insert_xy, device):
     
     result_h, result_w = result.shape
     
-    # If result is larger than expected (due to padding), crop to expected size
+    # Handle cropping for 2x super-resolution
     if result_h > expected_h or result_w > expected_w:
+        # Calculate center crop coordinates
         crop_h_start = (result_h - expected_h) // 2
         crop_w_start = (result_w - expected_w) // 2
         crop_h_end = crop_h_start + expected_h
@@ -183,9 +234,11 @@ def process_slice_whole(model, slice_img, insert_xy, device):
         
         result = result[crop_h_start:crop_h_end, crop_w_start:crop_w_end]
     
-    # If result is smaller than expected, something went wrong - keep as is but warn
+    # If result is smaller than expected, resize up
     elif result_h < expected_h or result_w < expected_w:
         print(f"Warning: Output size ({result_h}, {result_w}) smaller than expected ({expected_h}, {expected_w})")
+        import cv2
+        result = cv2.resize(result, (expected_w, expected_h), interpolation=cv2.INTER_LINEAR)
     
     return result
 

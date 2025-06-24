@@ -133,7 +133,7 @@ class DeconvUNet(nn.Module):
         
         current = self.final_relu(self.final_conv1(current))
         current = self.final_relu(self.final_conv2(current))
-        output = self.final_relu(self.final_conv3(current))
+        output = self.final_conv3(current)  # REMOVED ReLU - final layer should output raw values!
         
         return output
     
