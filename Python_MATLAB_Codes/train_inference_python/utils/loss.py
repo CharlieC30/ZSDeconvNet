@@ -33,7 +33,7 @@ def create_psf_loss(psf, TV_weight, Hess_weight, laplace_weight,
         else:
             psf_loss = K.mean(K.abs(y_true - y_conv))
         # Regularization 正則化
-        # TV_weight (Total Variation Loss): 計算相鄰像素間的差異。抑制雜訊，讓結果更平滑
+        # TV_weight (Total Variation Loss): 計算相鄰像素間的差異，抑制雜訊，讓結果更平滑
         if TV_weight>0 or laplace_weight>0:
             y = tf.slice(y_pred, [0, 0, 0, 0], tf.stack([-1, height-1, -1, -1])) - tf.slice(y_pred, [0, 1, 0, 0], [-1, -1, -1, -1])
             x = tf.slice(y_pred, [0, 0, 0, 0], tf.stack([-1, -1, width-1, -1])) - tf.slice(y_pred, [0, 0, 1, 0], [-1, -1, -1, -1])
