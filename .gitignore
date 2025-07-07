@@ -21,3 +21,5 @@ PyTorch_Deconv/Data/PSF/
 PyTorch_Deconv/Data/Train/
 
 PyTorch_Deconv/experiments/*/
+
+PyTorch_Deconv/Data/063025/
