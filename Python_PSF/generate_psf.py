@@ -1,6 +1,5 @@
 import numpy as np
 import tifffile
-import os
 from pathlib import Path
 
 def generate_optical_psf(dxy, dz, SizeXY, SizeZ, wavelength, NA, RI):
@@ -71,9 +70,6 @@ def save_psf_tiff(psf, output_path):
 def create_optical_psf_file(dxy=92.6, dz=92.6, SizeXY=257, SizeZ=1, wavelength=525, NA=1.1, RI=1.3):
     """Generate optical PSF and save with descriptive filename"""
     
-    print("Generating optical PSF...")
-    print(f"Parameters: {SizeXY}x{SizeXY}x{SizeZ}, dxy={dxy}nm, wavelength={wavelength}nm, NA={NA}")
-    
     # Generate PSF
     psf = generate_optical_psf(dxy, dz, SizeXY, SizeZ, wavelength, NA, RI)
     
@@ -87,17 +83,12 @@ def create_optical_psf_file(dxy=92.6, dz=92.6, SizeXY=257, SizeZ=1, wavelength=5
     output_path = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/output/optical") / filename
     saved_path = save_psf_tiff(psf, output_path)
     
-    print(f"Optical PSF saved: {saved_path}")
-    print(f"Shape: {psf.shape}, Max: {np.max(psf):.2e}")
-    print(f"Training parameters: --otf_or_psf_path '{saved_path}' --psf_src_mode 1 --dxypsf {dxy/1000}")
+    print(f"Optical PSF: output/optical/{filename}")
     
     return saved_path
 
 def create_gaussian_psf_file(size=31, sigma=3.0):
     """Generate Gaussian PSF and save with descriptive filename"""
-    
-    print("Generating Gaussian PSF...")
-    print(f"Parameters: {size}x{size}, sigma={sigma}")
     
     # Generate PSF
     psf = generate_gaussian_psf(size, sigma)
@@ -109,19 +100,10 @@ def create_gaussian_psf_file(size=31, sigma=3.0):
     output_path = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/output/gaussian") / filename
     saved_path = save_psf_tiff(psf, output_path)
     
-    print(f"Gaussian PSF saved: {saved_path}")
-    print(f"Shape: {psf.shape}, Max: {np.max(psf):.2e}")
+    print(f"Gaussian PSF: output/gaussian/{filename}")
     
     return saved_path
 
-def create_psf():
-    """Legacy function for backward compatibility"""
-    print("Optical PSF Generator")
-    return create_optical_psf_file()
-
 if __name__ == "__main__":
-    # create_optical_psf_file()
-    # create_gaussian_psf_file()
-    
     create_optical_psf_file(dxy=31.3, dz=31.3, SizeXY=257, SizeZ=1, wavelength=525, NA=1.3, RI=1.3)
     # create_gaussian_psf_file(size=257, sigma=4.0)
