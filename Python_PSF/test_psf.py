@@ -144,4 +144,4 @@ if __name__ == "__main__":
     main()
 
 # /home/aero/anaconda3/envs/zs-deconvnet_pytorch/bin/python /home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/test_psf.py --image xyft0.tif --psf gaussian/PSF_gaussian_sigma4.0_size257.tif --mode slice
-# /home/aero/anaconda3/envs/zs-deconvnet_pytorch/bin/python /home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/test_psf.py --image xyft0.tif --psf optical/PSF_optical_NA1.3_lambda525_size257.tif --mode slice
+# /home/aero/anaconda3/envs/zs-deconvnet_pytorch/bin/python /home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/test_psf.py --image xyft0.tif --psf optical/PSF_optical_NA1.1_lambda525_size257.tif --mode slice
