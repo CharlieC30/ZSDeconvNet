@@ -80,10 +80,10 @@ def create_optical_psf_file(dxy=92.6, dz=92.6, SizeXY=257, SizeZ=1, wavelength=5
     filename += ".tif"
     
     # Save to optical subdirectory
-    output_path = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/output/optical") / filename
+    output_path = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/PSFoutput/optical") / filename
     saved_path = save_psf_tiff(psf, output_path)
     
-    print(f"Optical PSF: output/optical/{filename}")
+    print(f"Optical PSF: PSFoutput/optical/{filename}")
     
     return saved_path
 
@@ -97,13 +97,13 @@ def create_gaussian_psf_file(size=31, sigma=3.0):
     filename = f"PSF_gaussian_sigma{sigma}_size{size}.tif"
     
     # Save to gaussian subdirectory
-    output_path = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/output/gaussian") / filename
+    output_path = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/PSFoutput/gaussian") / filename
     saved_path = save_psf_tiff(psf, output_path)
     
-    print(f"Gaussian PSF: output/gaussian/{filename}")
+    print(f"Gaussian PSF: PSFoutput/gaussian/{filename}")
     
     return saved_path
 
 if __name__ == "__main__":
     create_optical_psf_file(dxy=31.3, dz=31.3, SizeXY=257, SizeZ=1, wavelength=525, NA=1.3, RI=1.3)
-    # create_gaussian_psf_file(size=257, sigma=4.0)
+    create_gaussian_psf_file(size=257, sigma=4.0)
