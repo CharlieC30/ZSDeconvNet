@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Inference script for PyTorch Lightning deconvolution model.
-"""
-
 import os
 import argparse
 import yaml
