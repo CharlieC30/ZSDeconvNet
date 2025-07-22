@@ -1,6 +1,6 @@
 # PyTorch Pure Deconvolution Network
 
-A clean PyTorch Lightning implementation of ZS-DeconvNet for pure deconvolution with 2x super-resolution. Uses self-supervised learning with PSF-based physics loss.
+PyTorch Lightning implementation of ZS-DeconvNet for pure deconvolution with 2x super-resolution. Uses self-supervised learning with PSF-based physics loss.
 
 ## Installation
 
@@ -41,7 +41,7 @@ python infer.py \
     --checkpoint Data/Output/final_model.ckpt \
     --input_dir Data/InferenceInput \
     --output_dir Data/InferenceResult \
-    --device cuda
+    --device auto
 ```
 
 ### Large Images (Tiling)
@@ -52,11 +52,11 @@ python infer.py \
     --output_dir Data/InferenceResult \
     --tile_size 512 \
     --overlap 64 \
-    --device cuda
+    --device auto
 ```
 
 ### Original Tiling Method
-For best quality on large images (recommended):
+Best quality for large images:
 ```bash
 python infer.py \
     --checkpoint Data/Output/final_model.ckpt \
@@ -67,30 +67,30 @@ python infer.py \
     --num_seg_window_y 4 \
     --overlap_x 20 \
     --overlap_y 20 \
-    --device cuda
+    --device auto
 ```
 
 ## Key Parameters
 
-### Training (`config.yaml`)
+### Training
 - `batch_size: 4` - Training batch size
-- `max_epochs: 100` - Training epochs
+- `max_epochs: 100` - Training epochs  
 - `lr: 5e-5` - Learning rate
-- `hessian_weight: 0.02` - Edge preservation (critical)
+- `hessian_weight: 0.02` - Edge preservation
 
 ### Inference
 - `--tile_size 512` - Tile size for large images
 - `--overlap 64` - Overlap between tiles
-- `--use_original_tiling` - Use original tiling algorithm (best quality)
+- `--use_original_tiling` - Use original tiling algorithm
 - `--num_seg_window_x/y 4` - Number of segments per dimension
 - `--overlap_x/y 20` - Overlap for original tiling
 
 ## Troubleshooting
 
 1. **CUDA out of memory**: Reduce `batch_size` or use tiling for inference
-2. **Model loading warnings**: Can be safely ignored
+2. **Model loading warnings**: Safe to ignore
 3. **Black outputs**: Check `hessian_weight: 0.02` in config
-4. **Large images**: Use `--use_original_tiling` for best results
+4. **Large images**: Use `--use_original_tiling`
 
 ## Output
 
