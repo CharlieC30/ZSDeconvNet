@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 def load_psf(psf_path, device='cpu'):
+    """Load and normalize PSF from file."""
     psf = np.float32(tifffile.imread(psf_path))
     if len(psf.shape) == 3:
         psf = psf[:, :, 0]
@@ -15,6 +16,7 @@ def load_psf(psf_path, device='cpu'):
 
 
 def load_image(image_path, mode='slice'):
+    """Load image with different processing modes."""
     img = np.array(tifffile.imread(image_path)).astype(np.float32)
     
     if len(img.shape) == 3:
@@ -34,10 +36,12 @@ def load_image(image_path, mode='slice'):
 
 
 def apply_psf_blur(image_tensor, psf_tensor):
+    """Apply PSF blur using 2D convolution."""
     return F.conv2d(image_tensor, psf_tensor, padding='same')
 
 
 def process_3d_slices(img_3d, psf_tensor, device='cpu'):
+    """Process 3D image stack slice by slice."""
     num_slices = img_3d.shape[0]
     processed_slices = []
     
@@ -57,6 +61,7 @@ def process_3d_slices(img_3d, psf_tensor, device='cpu'):
 
 
 def save_image(data, output_path):
+    """Save processed image as 16-bit TIFF."""
     if isinstance(data, torch.Tensor):
         img_np = data.squeeze().cpu().numpy()
     else:
@@ -76,7 +81,7 @@ def main():
     
     args = parser.parse_args()
     
-    # Auto-detect device
+    # Device selection
     if torch.cuda.is_available():
         device = 'cuda'
         print(f"GPU detected: {torch.cuda.get_device_name(0)}")
@@ -84,12 +89,13 @@ def main():
     else:
         device = 'cpu'
         print("GPU not available - using CPU")
-    print()  # Empty line for better readability
+    print()
     
     # Paths
-    input_dir = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/PSFtest/PSFtest_input")
-    output_dir = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/PSFtest/PSFtest_output")
-    psf_dir = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/PSFoutput")
+    base_dir = Path(__file__).parent
+    input_dir = base_dir / "PSFtest" / "PSFtest_input"
+    output_dir = base_dir / "PSFtest" / "PSFtest_output"
+    psf_dir = base_dir / "PSFoutput"
     
     # Input image path
     image_path = input_dir / args.image
@@ -97,7 +103,7 @@ def main():
         print(f"Image not found: {image_path}")
         return
     
-    # PSF path (search in subdirectories)
+    # Find PSF file
     psf_path = None
     for subdir in ['optical', 'gaussian']:
         potential_path = psf_dir / subdir / args.psf
@@ -105,7 +111,6 @@ def main():
             psf_path = potential_path
             break
     
-    # Also check root PSFoutput directory
     if psf_path is None:
         potential_path = psf_dir / args.psf
         if potential_path.exists():
@@ -116,11 +121,10 @@ def main():
         print(f"Searched in: {psf_dir}/optical/, {psf_dir}/gaussian/, {psf_dir}/")
         return
     
-    # Load image and PSF
     image_data, is_3d = load_image(image_path, args.mode)
     psf_tensor = load_psf(psf_path, device)
     
-    # Process based on mode
+    # Apply blur processing
     if is_3d and args.mode == 'slice':
         blurred_3d = process_3d_slices(image_data, psf_tensor, device)
         image_stem = image_path.stem
@@ -143,5 +147,6 @@ def main():
 if __name__ == "__main__":
     main()
 
-# /home/aero/anaconda3/envs/zs-deconvnet_pytorch/bin/python /home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/test_psf.py --image xyft0.tif --psf gaussian/PSF_gaussian_sigma4.0_size257.tif --mode slice
-# /home/aero/anaconda3/envs/zs-deconvnet_pytorch/bin/python /home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/test_psf.py --image xyft0.tif --psf optical/PSF_optical_NA1.1_lambda525_size257.tif --mode slice
+# Example usage:
+# python test_psf.py --image xyft0.tif --psf gaussian/PSF_gaussian_sigma4.0_size257.tif --mode slice
+# python test_psf.py --image xyft0.tif --psf optical/PSF_optical_NA1.1_lambda525_size257.tif --mode slice

@@ -3,22 +3,22 @@ import tifffile
 from pathlib import Path
 
 def generate_optical_psf(dxy, dz, SizeXY, SizeZ, wavelength, NA, RI):
-    """Generate optical PSF (equivalent to MATLAB XxPSFGenerator.m)"""
+    """Generate optical PSF based on microscope parameters."""
     
-    # Frequency space setup
+    # Frequency space coordinates
     dk = 2 * np.pi / dxy / SizeXY
     kx = np.arange(-(SizeXY-1)//2, (SizeXY-1)//2 + 1) * dk
     kx, ky = np.meshgrid(kx, kx)
     kr_sq = kx**2 + ky**2
     z = np.arange(-(SizeZ-1)//2, (SizeZ-1)//2 + 1) * dz
     
-    # Optical system
+    # Optical system parameters
     PupilMask = (kr_sq <= (2*np.pi/wavelength*NA)**2)
     kz_temp = (2*np.pi/wavelength*RI)**2 - kr_sq
     kz_temp = np.where(kz_temp >= 0, kz_temp, 0)
     kz = np.sqrt(kz_temp) * PupilMask
     
-    # Calculate PSF for each layer
+    # Generate PSF for each z-layer
     PSF = np.zeros((SizeXY, SizeXY, SizeZ), dtype=np.float64)
     
     for ii in range(SizeZ):
@@ -29,29 +29,25 @@ def generate_optical_psf(dxy, dz, SizeXY, SizeZ, wavelength, NA, RI):
     return PSF
 
 def generate_gaussian_psf(size, sigma):
-    """Generate Gaussian PSF (equivalent to MATLAB XxGuassianGenerator2D.m)"""
+    """Generate Gaussian PSF for simplified blur simulation."""
     
-    # Match MATLAB's fspecial('gaussian') implementation
     # Create coordinate arrays
     x = np.arange(size) - (size - 1) / 2
     y = np.arange(size) - (size - 1) / 2
     X, Y = np.meshgrid(x, y)
     
-    # Generate Gaussian kernel (matches MATLAB fspecial)
+    # Generate normalized Gaussian kernel
     gaussian_2d = np.exp(-(X**2 + Y**2) / (2 * sigma**2))
-    
-    # Normalize (matches MATLAB normalization)
     gaussian_2d = gaussian_2d / np.sum(gaussian_2d)
     
-    # Convert to 3D format for consistency
+    # Convert to 3D format
     gaussian_3d = gaussian_2d[:, :, np.newaxis]
     
     return gaussian_3d
 
 def save_psf_tiff(psf, output_path):
-    """Save PSF as TIFF format"""
+    """Save PSF as TIFF file with 16-bit normalization."""
     
-    # Ensure output directory exists
     output_dir = Path(output_path).parent
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -59,7 +55,7 @@ def save_psf_tiff(psf, output_path):
     psf_normalized = psf / np.max(psf) * (2**15)
     psf_uint16 = psf_normalized.astype(np.uint16)
     
-    # Save TIFF
+    # Save as TIFF
     if psf.shape[2] == 1:
         tifffile.imwrite(str(output_path), psf_uint16[:, :, 0])
     else:
@@ -68,19 +64,17 @@ def save_psf_tiff(psf, output_path):
     return str(output_path)
 
 def create_optical_psf_file(dxy=92.6, dz=92.6, SizeXY=257, SizeZ=1, wavelength=525, NA=1.1, RI=1.3):
-    """Generate optical PSF and save with descriptive filename"""
+    """Generate and save optical PSF with auto-generated filename."""
     
-    # Generate PSF
     psf = generate_optical_psf(dxy, dz, SizeXY, SizeZ, wavelength, NA, RI)
     
-    # Create descriptive filename
     filename = f"PSF_optical_NA{NA}_lambda{wavelength}_size{SizeXY}"
     if SizeZ > 1:
         filename += f"x{SizeZ}"
     filename += ".tif"
     
-    # Save to optical subdirectory
-    output_path = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/PSFoutput/optical") / filename
+    base_dir = Path(__file__).parent
+    output_path = base_dir / "PSFoutput" / "optical" / filename
     saved_path = save_psf_tiff(psf, output_path)
     
     print(f"Optical PSF: PSFoutput/optical/{filename}")
@@ -88,16 +82,14 @@ def create_optical_psf_file(dxy=92.6, dz=92.6, SizeXY=257, SizeZ=1, wavelength=5
     return saved_path
 
 def create_gaussian_psf_file(size=31, sigma=3.0):
-    """Generate Gaussian PSF and save with descriptive filename"""
+    """Generate and save Gaussian PSF with auto-generated filename."""
     
-    # Generate PSF
     psf = generate_gaussian_psf(size, sigma)
     
-    # Create descriptive filename
     filename = f"PSF_gaussian_sigma{sigma}_size{size}.tif"
     
-    # Save to gaussian subdirectory
-    output_path = Path("/home/aero/charliechang/projects/ZS-DeconvNet/Python_PSF/PSFoutput/gaussian") / filename
+    base_dir = Path(__file__).parent
+    output_path = base_dir / "PSFoutput" / "gaussian" / filename
     saved_path = save_psf_tiff(psf, output_path)
     
     print(f"Gaussian PSF: PSFoutput/gaussian/{filename}")
@@ -105,5 +97,5 @@ def create_gaussian_psf_file(size=31, sigma=3.0):
     return saved_path
 
 if __name__ == "__main__":
-    create_optical_psf_file(dxy=31.3, dz=31.3, SizeXY=257, SizeZ=1, wavelength=525, NA=1.1, RI=1.3)
+    create_optical_psf_file(dxy=31.3, dz=31.3, SizeXY=257, SizeZ=1, wavelength=525, NA=1.2, RI=1.3)
     # create_gaussian_psf_file(size=257, sigma=4.0)
