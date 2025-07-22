@@ -1,0 +1,106 @@
+Three-Class Segmentation with U-Net using PyTorch Lightning 2.3.2
+I want to implement a three-class segmentation task using the U-Net model and PyTorch Lightning (v2.3.2). I will be using 1 GPU for training.
+
+Please help me generate the following .py files according to the specifications below:
+
+1. dataset.py
+    Define a PyTorch Dataset class.
+    Inputs:
+    img_dir: A folder containing only single-slice .tif image files. Each file represents a 2D image. Each image dtype is uint16.
+    mask_path: A single multi-slice .tif file (shape: [slices, H, W]). Each mask dtype is uint8. This file contains the ground truth masks for all corresponding images in img_dir. Each slice in mask_path corresponds to an image in img_dir by its index/order.
+    Requirements:
+    Image Loading: Load each .tif image from img_dir as a 2D array.
+    Mask Loading: Load the mask_path as a 3D array.
+    Normalization: Normalize each individual image to the [0, 1] range. Since pixel ranges vary across images, perform min-max normalization independently for each image slice.
+    Resizing: Resize all loaded images and masks to (256, 256). Ensure that image interpolation is suitable for continuous data (e.g., bilinear), and mask interpolation is suitable for discrete labels (e.g., nearest-neighbor) to preserve segmentation boundaries.
+    Data Augmentation: No data augmentation is required beyond resizing.
+    The __getitem__ method should return a dictionary:
+    {
+        "img": tensor(),    # shape: (1, H, W), where H, W are (256, 256) after resizing
+        "labels": tensor()  # shape: (H, W), where H, W are (256, 256) after resizing. The labels should be integers representing the classes (0, 1, 2).
+    }
+
+2.metrics.py
+    Define a function to calculate the Dice coefficient for each of the three classes and then report the mean Dice coefficient across all classes.
+    The function should accept predicted probabilities (or logits) and ground truth labels.
+    This will be the only evaluation metric used during validation.
+
+3.model.py
+    Define the U-Net model architecture in this file.
+    The U-Net should be configured for three output classes.
+    The input image size will be (1, 256, 256).
+
+4.lightning_module.py
+    Create a template Lightning module class as shown below. Do not add any other functions not explicitly in the template.
+
+    import pytorch_lightning as pl
+    import torch.nn as nn
+    import torch
+
+    class LitModel(pl.LightningModule):
+        def __init__(self, num_classes: int = 3, learning_rate: float = 0.001):
+            super().__init__()
+            self.save_hyperparameters()
+            # The U-Net model will be initialized here, imported from model.py
+            self.model = None # Placeholder, will be replaced with U-Net
+            # Loss function
+            self.loss_fn = nn.CrossEntropyLoss()
+            # Metric function
+            self.dice_metric_fn = None # Placeholder, will be replaced with Dice function from metrics.py
+
+        def training_step(self, batch, batch_idx):
+            # Implement training logic: forward pass, loss calculation, logging
+            ...
+
+        def validation_step(self, batch, batch_idx):
+            # Implement validation logic: forward pass, loss calculation, metric calculation, logging
+            ...
+
+        def on_validation_epoch_end(self):
+            # Aggregate and log validation metrics (e.g., mean Dice)
+            ...
+
+        def configure_optimizers(self):
+            # Define and return the optimizer
+            ...
+    Loss Function: Use torch.nn.CrossEntropyLoss.
+    Optimizer: Use torch.optim.Adam.
+    The __init__ method should accept num_classes and learning_rate as arguments, which will be passed from train.py.
+
+
+5.train.py
+    This script should:
+    Load the dataset using the Dataset class from dataset.py.
+    Import the Dice metric function from metrics.py.
+    Import the U-Net model architecture from model.py and instantiate it.
+    Instantiate the LitModel from lightning_module.py, passing the U-Net model, loss function, and Dice metric.
+    Set up the PyTorch Lightning Trainer. Crucially, all Trainer parameters should be configurable via a YAML file (cfg.yaml) and not hardcoded in train.py. And do not allow Pytorch Lightning to load any default Trainer parameters not explicitly specified in the YAML file.
+
+6. cfg.yaml
+    This file should contain the following configuration:
+        data_params:z
+          img_dir: "data/raw_data"
+          mask_path: "data/mask.tif"
+          img_size: [256, 256]
+          val_split: 0.2 # Represents 20% of data for validation
+
+        model_params:
+          num_classes: 3
+
+        training_params:
+          learning_rate: 0.001
+          batch_size: 8
+
+        trainer:
+          max_epochs: 100
+          accelerator: "gpu"
+          devices: 1
+
+7. inference.py
+    This script should:
+    Load the trained model from a checkpoint.(use --checkpoint argument to specify the path)
+    Load images from val_split dataset, preprocess it (resize, normalize), and pass it through the model to get predictions.
+    Make sure the images and model are on the same device.
+    Save the predicted segmentation mask as a .tif file in the "result" directory.
+
+Note: When we run train.py, training should start directly using all components specified above without any further modifications.

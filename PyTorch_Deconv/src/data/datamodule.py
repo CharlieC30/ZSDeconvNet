@@ -209,7 +209,7 @@ class DeconvDataModule(pl.LightningDataModule):
         self.seed = seed
         
         # Dataset paths
-        self.train_input_dir = os.path.join(data_dir, 'Train')
+        self.train_input_dir = os.path.join(data_dir, 'Train/063025')
         self.inference_input_dir = os.path.join(data_dir, 'InferenceInput')
         
     def setup(self, stage: Optional[str] = None):
@@ -229,12 +229,24 @@ class DeconvDataModule(pl.LightningDataModule):
             input_files = train_files
             target_files = train_files  # Modify this based on your data structure
             
-            # Split into train and validation
-            train_input, val_input, train_target, val_target = train_test_split(
-                input_files, target_files, 
-                train_size=self.train_val_split, 
-                random_state=self.seed
-            )
+            # Handle data splitting based on file count and split ratio
+            if len(input_files) == 1 or self.train_val_split >= 1.0:
+                # Use all files for both training and validation when:
+                # 1. Only one file available, or
+                # 2. train_val_split is 1.0 (use all data)
+                train_input = input_files
+                val_input = input_files
+                train_target = target_files
+                val_target = target_files
+                print(f"Using all {len(input_files)} files for both training and validation")
+            else:
+                # Normal train/validation split
+                train_input, val_input, train_target, val_target = train_test_split(
+                    input_files, target_files, 
+                    train_size=self.train_val_split, 
+                    random_state=self.seed
+                )
+                print(f"Split {len(input_files)} files: {len(train_input)} training, {len(val_input)} validation")
             
             # Create datasets
             self.train_dataset = TiffSliceDataset(

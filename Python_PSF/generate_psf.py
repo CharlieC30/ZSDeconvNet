@@ -1,97 +1,101 @@
 import numpy as np
 import tifffile
-import os
-import math
+from pathlib import Path
 
-def generate_psf(dxy, dz, size_xy, size_z, lamd, na, ri, file_name):
-    """
-    Generates a theoretical 3D wide-field microscope Point Spread Function (PSF)
-    based on optical parameters.
+def generate_optical_psf(dxy, dz, SizeXY, SizeZ, wavelength, NA, RI):
+    """Generate optical PSF based on microscope parameters."""
+    
+    # Frequency space coordinates
+    dk = 2 * np.pi / dxy / SizeXY
+    kx = np.arange(-(SizeXY-1)//2, (SizeXY-1)//2 + 1) * dk
+    kx, ky = np.meshgrid(kx, kx)
+    kr_sq = kx**2 + ky**2
+    z = np.arange(-(SizeZ-1)//2, (SizeZ-1)//2 + 1) * dz
+    
+    # Optical system parameters
+    PupilMask = (kr_sq <= (2*np.pi/wavelength*NA)**2)
+    kz_temp = (2*np.pi/wavelength*RI)**2 - kr_sq
+    kz_temp = np.where(kz_temp >= 0, kz_temp, 0)
+    kz = np.sqrt(kz_temp) * PupilMask
+    
+    # Generate PSF for each z-layer
+    PSF = np.zeros((SizeXY, SizeXY, SizeZ), dtype=np.float64)
+    
+    for ii in range(SizeZ):
+        phase_term = PupilMask * np.exp(1j * kz * z[ii])
+        fft_result = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(phase_term)))
+        PSF[:, :, ii] = np.abs(fft_result)**2
+    
+    return PSF
 
-    Args:
-        dxy (float): Lateral sampling interval in the image plane (nm).
-        dz (float): Axial sampling interval in the image plane (nm).
-        size_xy (int): Lateral size (number of pixels) of the PSF in x and y.
-                       Should be an odd number for the center to be a pixel.
-        size_z (int): Axial size (number of slices) of the PSF in z.
-                      Should be an odd number for the center to be a slice.
-        lamd (float): Emission wavelength (nm).
-        na (float): Numerical Aperture of the objective.
-        ri (float): Refractive Index of the immersion medium.
-        file_name (str): Full path including filename to save the generated PSF (.tif).
-    """
-    if size_xy % 2 == 0 or size_z % 2 == 0:
-        print("Warning: SizeXY and SizeZ should ideally be odd numbers for the center pixel/slice.")
+def generate_gaussian_psf(size, sigma):
+    """Generate Gaussian PSF for simplified blur simulation."""
+    
+    # Create coordinate arrays
+    x = np.arange(size) - (size - 1) / 2
+    y = np.arange(size) - (size - 1) / 2
+    X, Y = np.meshgrid(x, y)
+    
+    # Generate normalized Gaussian kernel
+    gaussian_2d = np.exp(-(X**2 + Y**2) / (2 * sigma**2))
+    gaussian_2d = gaussian_2d / np.sum(gaussian_2d)
+    
+    # Convert to 3D format
+    gaussian_3d = gaussian_2d[:, :, np.newaxis]
+    
+    return gaussian_3d
 
-    # Calculate frequency domain parameters
-    # Spatial frequencies kx, ky
-    dk = 2 * np.pi / (dxy * size_xy)
-    kx = np.arange(-(size_xy - 1) / 2, (size_xy - 1) / 2 + 1) * dk
-    ky = np.arange(-(size_xy - 1) / 2, (size_xy - 1) / 2 + 1) * dk
-    kx_grid, ky_grid = np.meshgrid(kx, ky, indexing='xy') # Match MATLAB's meshgrid behavior
-    kr_sq = kx_grid**2 + ky_grid**2
+def save_psf_tiff(psf, output_path):
+    """Save PSF as TIFF file with 16-bit normalization."""
+    
+    output_dir = Path(output_path).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Normalize to 16-bit range
+    psf_normalized = psf / np.max(psf) * (2**15)
+    psf_uint16 = psf_normalized.astype(np.uint16)
+    
+    # Save as TIFF
+    if psf.shape[2] == 1:
+        tifffile.imwrite(str(output_path), psf_uint16[:, :, 0])
+    else:
+        tifffile.imwrite(str(output_path), psf_uint16)
+    
+    return str(output_path)
 
-    # Axial spatial coordinates z
-    z = np.arange(-(size_z - 1) / 2, (size_z - 1) / 2 + 1) * dz
+def create_optical_psf_file(dxy=92.6, dz=92.6, SizeXY=257, SizeZ=1, wavelength=525, NA=1.1, RI=1.3):
+    """Generate and save optical PSF with auto-generated filename."""
+    
+    psf = generate_optical_psf(dxy, dz, SizeXY, SizeZ, wavelength, NA, RI)
+    
+    filename = f"PSF_optical_NA{NA}_lambda{wavelength}_size{SizeXY}"
+    if SizeZ > 1:
+        filename += f"x{SizeZ}"
+    filename += ".tif"
+    
+    base_dir = Path(__file__).parent
+    output_path = base_dir / "PSFoutput" / "optical" / filename
+    saved_path = save_psf_tiff(psf, output_path)
+    
+    print(f"Optical PSF: PSFoutput/optical/{filename}")
+    
+    return saved_path
 
-    # Define the Pupil Mask in frequency space
-    # The cutoff frequency is 2*pi*NA/lambda
-    pupil_mask = (kr_sq <= (2 * np.pi * na / lamd)**2)
+def create_gaussian_psf_file(size=31, sigma=3.0):
+    """Generate and save Gaussian PSF with auto-generated filename."""
+    
+    psf = generate_gaussian_psf(size, sigma)
+    
+    filename = f"PSF_gaussian_sigma{sigma}_size{size}.tif"
+    
+    base_dir = Path(__file__).parent
+    output_path = base_dir / "PSFoutput" / "gaussian" / filename
+    saved_path = save_psf_tiff(psf, output_path)
+    
+    print(f"Gaussian PSF: PSFoutput/gaussian/{filename}")
+    
+    return saved_path
 
-    # Calculate axial frequency component kz
-    # kz = sqrt((2*pi*RI/lambda)^2 - kr_sq)
-    kz_sq = (2 * np.pi * ri / lamd)**2 - kr_sq
-    # Ensure kz is real where pupil_mask is True, handle potential small negative values due to precision
-    kz = np.sqrt(np.maximum(0, kz_sq)) * pupil_mask
-
-    # Initialize the 3D PSF array
-    psf_3d = np.zeros((size_xy, size_xy, size_z), dtype=np.float64)
-
-    # Calculate PSF slice by slice for each axial position
-    for ii in range(size_z):
-        # Calculate the complex amplitude in frequency space for this z slice
-        # This is the Pupil Function multiplied by a phase term exp(i * kz * z)
-        tmp_freq = pupil_mask * np.exp(1j * kz * z[ii])
-
-        # Perform 2D inverse Fourier Transform to get the Amplitude Spread Function (ASF)
-        # Use ifftshift before ifft2 and fftshift after ifft2 to handle frequency centering
-        tmp_spatial = np.fft.fftshift(np.fft.ifft2(np.fft.ifftshift(tmp_freq)))
-
-        # The Intensity PSF is the square of the magnitude of the ASF
-        psf_3d[:, :, ii] = np.abs(tmp_spatial)**2
-
-    # Normalize the PSF and convert to uint16
-    # Normalize to max 1, then scale to 2^15 for uint16 storage
-    psf_3d = psf_3d / np.max(psf_3d) * (2**15)
-    psf_uint16 = psf_3d.astype(np.uint16)
-
-    # Ensure the output directory exists
-    output_dir = os.path.dirname(file_name)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # Save the 3D PSF as a multi-page TIFF file
-    # tifffile saves in ZYX order by default for 3D arrays
-    tifffile.imwrite(file_name, psf_uint16, photometric='minisblack')
-
-    print(f"Generated PSF saved to: {file_name}")
-
-# --- Main execution block ---
 if __name__ == "__main__":
-    # Define parameters (similar to the MATLAB script)
-    dxy = 92.6e-3  # lateral sampling, in um (converted from nm)
-    dz = 92.6e-3   # axial sampling, in um (converted from nm)
-    size_xy = 27   # lateral pixel number of PSF
-    size_z = 13    # axial pixel number of PSF
-    lamd = 525e-3  # emission wavelength, in um (converted from nm)
-    na = 1.1       # numerical aperture
-    ri = 1.3       # refractive index
-
-    # Define the output file path
-    # Assumes the script is run from within the ZS-DeconvNet project structure
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(script_dir, 'generated_psfs')
-    file_name = os.path.join(output_dir, 'SimulatedPSF.tif')
-
-    # Generate and save the PSF
-    generate_psf(dxy, dz, size_xy, size_z, lamd, na, ri, file_name)
+    create_optical_psf_file(dxy=31.3, dz=31.3, SizeXY=257, SizeZ=1, wavelength=525, NA=1.2, RI=1.3)
+    # create_gaussian_psf_file(size=257, sigma=4.0)
