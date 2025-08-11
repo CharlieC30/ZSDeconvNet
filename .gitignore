@@ -14,6 +14,8 @@ env/
 
 .DS_Store
 
+Fiji_Plugin/result
+
 PyTorch_Deconv/Data/Output/
 PyTorch_Deconv/Data/InferenceInput/
 PyTorch_Deconv/Data/InferenceResult/

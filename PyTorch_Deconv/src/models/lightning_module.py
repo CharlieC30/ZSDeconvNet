@@ -249,17 +249,30 @@ class DeconvolutionLightningModule(pl.LightningModule):
     
     def save_checkpoint_with_metadata(self, filepath):
         """Save checkpoint with additional metadata."""
-        checkpoint = {
-            'state_dict': self.state_dict(),
-            'model_config': self.hparams.model_config,
-            'loss_config': self.hparams.loss_config,
-            'psf_path': self.hparams.psf_path,
-            'psf_config': self.psf_config,
-            'epoch': self.current_epoch,
-            'train_loss_history': self.train_loss_history,
-            'val_loss_history': self.val_loss_history
-        }
-        torch.save(checkpoint, filepath)
+        try:
+            checkpoint = {
+                'state_dict': self.state_dict(),
+                'model_config': self.hparams.model_config,
+                'loss_config': self.hparams.loss_config,
+                'psf_path': self.hparams.psf_path,
+                'psf_config': self.psf_config,
+                'epoch': self.current_epoch,
+                'train_loss_history': self.train_loss_history,
+                'val_loss_history': self.val_loss_history
+            }
+            torch.save(checkpoint, filepath)
+        except Exception as e:
+            print(f"Warning: Failed to save checkpoint with full metadata: {e}")
+            # Fallback: save only the model weights and essential config
+            checkpoint = {
+                'state_dict': self.model.state_dict(),  # Only save model weights
+                'model_config': self.hparams.model_config,
+                'loss_config': self.hparams.loss_config,
+                'psf_path': self.hparams.psf_path,
+                'psf_config': self.psf_config
+            }
+            torch.save(checkpoint, filepath)
+            print(f"Saved fallback checkpoint to: {filepath}")
         
     @classmethod
     def load_from_checkpoint_with_metadata(cls, checkpoint_path, map_location=None):

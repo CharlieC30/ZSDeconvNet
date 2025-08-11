@@ -141,6 +141,32 @@ class PSFConvolutionLoss(nn.Module):
                        torch.mean(xy ** 2) + torch.mean(yx ** 2))
         
         return hessian_loss
+    
+    def state_dict(self, destination=None, prefix='', keep_vars=False):
+        """Custom state_dict that excludes PSF tensor to avoid DDP synchronization issues."""
+        # Get the default state dict
+        state_dict = super().state_dict(destination, prefix, keep_vars)
+        
+        # Remove PSF tensor from state dict as it's set during initialization
+        psf_key = prefix + 'psf'
+        if psf_key in state_dict:
+            del state_dict[psf_key]
+        
+        return state_dict
+    
+    def load_state_dict(self, state_dict, strict=True):
+        """Custom load_state_dict that handles missing PSF tensor."""
+        # PSF tensor is not included in state_dict, so we need to handle it
+        # Create a copy of the state dict to avoid modifying the original
+        state_dict_copy = state_dict.copy()
+        
+        # Add PSF tensor if it's missing (it should be missing due to our custom state_dict)
+        if 'psf' not in state_dict_copy and hasattr(self, 'psf'):
+            # PSF is already set during initialization, no need to load it
+            pass
+        
+        # Load the state dict with strict=False to handle missing PSF gracefully
+        return super().load_state_dict(state_dict_copy, strict=False)
 
 
 class DeconvolutionLoss(nn.Module):
@@ -169,6 +195,14 @@ class DeconvolutionLoss(nn.Module):
     def update_psf(self, new_psf_tensor):
         """Update the PSF tensor."""
         self.psf_loss.psf = new_psf_tensor
+    
+    def state_dict(self, destination=None, prefix='', keep_vars=False):
+        """Custom state_dict that excludes PSF tensor to avoid DDP synchronization issues."""
+        return super().state_dict(destination, prefix, keep_vars)
+    
+    def load_state_dict(self, state_dict, strict=True):
+        """Custom load_state_dict that handles PSF-related parameters."""
+        return super().load_state_dict(state_dict, strict=False)
 
 
 class MultiScaleLoss(nn.Module):

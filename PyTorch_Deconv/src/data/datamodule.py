@@ -209,7 +209,7 @@ class DeconvDataModule(pl.LightningDataModule):
         self.seed = seed
         
         # Dataset paths
-        self.train_input_dir = os.path.join(data_dir, 'Train/063025')
+        self.train_input_dir = os.path.join(data_dir, 'Train/061625')
         self.inference_input_dir = os.path.join(data_dir, 'InferenceInput')
         
     def setup(self, stage: Optional[str] = None):
@@ -265,6 +265,10 @@ class DeconvDataModule(pl.LightningDataModule):
         
     
     def train_dataloader(self):
+        # Ensure training dataset is available
+        if not hasattr(self, 'train_dataset') or self.train_dataset is None:
+            self.setup('fit')
+        
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
@@ -275,6 +279,10 @@ class DeconvDataModule(pl.LightningDataModule):
         )
     
     def val_dataloader(self):
+        # Ensure validation dataset is available
+        if not hasattr(self, 'val_dataset') or self.val_dataset is None:
+            self.setup('fit')
+        
         return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,

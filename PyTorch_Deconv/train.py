@@ -158,10 +158,22 @@ def main():
     else:
         trainer.fit(model, datamodule)
     
-    # Save final model
+    # Save final model with error handling
     final_model_path = output_dir / 'final_model.ckpt'
-    trainer.save_checkpoint(final_model_path)
-    print(f"Final model saved to: {final_model_path}")
+    try:
+        trainer.save_checkpoint(final_model_path)
+        print(f"Final model saved to: {final_model_path}")
+    except Exception as e:
+        print(f"Warning: Failed to save checkpoint via trainer: {e}")
+        # Fallback: use model's custom save method
+        try:
+            model.save_checkpoint_with_metadata(final_model_path)
+            print(f"Final model saved using fallback method to: {final_model_path}")
+        except Exception as e2:
+            print(f"Error: Failed to save model: {e2}")
+            # Last resort: save only the model weights
+            torch.save(model.model.state_dict(), final_model_path.with_suffix('.pth'))
+            print(f"WARNING: Only model weights saved to: {final_model_path.with_suffix('.pth')}")
     
     # Test the model
     if not args.fast_dev_run:
