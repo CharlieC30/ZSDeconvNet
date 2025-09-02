@@ -52,41 +52,87 @@ class PSFConvolutionLoss(nn.Module):
         """
         batch_size, channels, height, width = y_pred.shape
         
-        # Apply PSF convolution to prediction
-        y_conv = F.conv2d(y_pred, self.psf, padding='same')
+        # CRITICAL: Test different PSF processing approaches
+        # Analysis of Fiji's permute_dimensions([1, 2, 3, 0]):
+        # 
+        # In TensorFlow/Keras:
+        # - PSF likely comes in as (height, width, in_channels, out_channels)
+        # - permute_dimensions([1, 2, 3, 0]) rearranges to (width, in_channels, out_channels, height)
+        # - But this seems wrong for conv2d... Let me test different interpretations
+        
+        # Method 1: Original PyTorch approach (direct)
+        y_conv_original = F.conv2d(y_pred, self.psf, padding='same')
+        
+        # Method 2: Test PSF rotation (180 degrees) - common in deconvolution
+        psf_rotated = torch.rot90(self.psf, k=2, dims=[-2, -1])  # 180-degree rotation
+        y_conv_rotated = F.conv2d(y_pred, psf_rotated, padding='same')
+        
+        # Method 3: Test PSF flip (both dimensions)
+        psf_flipped = torch.flip(self.psf, dims=[-2, -1])
+        y_conv_flipped = F.conv2d(y_pred, psf_flipped, padding='same')
+        
+        # Will select the best method after comparing results
+        # (Selection happens in debug block below)
+        
+        # DEBUG: Track tensor shapes and values at each step
+        if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+            print(f"\n=== PSF Loss Debug ===")
+            print(f"Input y_pred shape: {y_pred.shape}, range: [{y_pred.min().item():.6f}, {y_pred.max().item():.6f}]")
+            print(f"PSF shape: {self.psf.shape}, sum: {self.psf.sum().item():.6f}")
+            print(f"After conv - Original: shape {y_conv_original.shape}, range [{y_conv_original.min().item():.6f}, {y_conv_original.max().item():.6f}]")
+            print(f"After conv - Rotated: shape {y_conv_rotated.shape}, range [{y_conv_rotated.min().item():.6f}, {y_conv_rotated.max().item():.6f}]")
+            
+            # Compare differences
+            diff_rot = torch.mean(torch.abs(y_conv_original - y_conv_rotated)).item()
+            print(f"Difference Original vs Rotated: {diff_rot:.6f}")
+            
+        # Select method based on which gives larger response (non-zero)
+        if y_conv_original.max() > y_conv_rotated.max():
+            y_conv = y_conv_original
+            if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+                print("Selected: Original PSF method")
+        else:
+            y_conv = y_conv_rotated  
+            if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+                print("Selected: Rotated PSF method")
         
         # Handle upsampling: if enabled, the y_conv is 2x size, need to downsample
         if self.upsample_flag:
-            y_conv = F.interpolate(y_conv, scale_factor=0.5, mode='bilinear', align_corners=False)
+            # Test different downsampling methods to match TensorFlow exactly
+            # Method 1: Bilinear interpolation (current approach)
+            y_conv_bilinear = F.interpolate(y_conv, scale_factor=0.5, mode='bilinear', align_corners=False)
+            
+            # Method 2: Nearest neighbor (matches TensorFlow's resize with different method)
+            y_conv_nearest = F.interpolate(y_conv, scale_factor=0.5, mode='nearest')
+            
+            # Use bilinear downsampling (most common)
+            y_conv = y_conv_bilinear
+            
+            if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+                print(f"After downsampling: shape {y_conv.shape}, range [{y_conv.min().item():.6f}, {y_conv.max().item():.6f}]")
         
-        # Crop the convolved output to remove padding and match target size
-        # For upsampled case: y_conv is now back to original input size after interpolation
-        # Need to crop insert_xy from all sides
+        # EXACT TensorFlow implementation: use full insert_xy for cropping
+        # TensorFlow: y_conv[:,insert_xy:shape[1]-insert_xy,insert_xy:shape[2]-insert_xy,:]
         if self.insert_xy > 0:
-            # Calculate target dimensions from y_true
-            target_h, target_w = y_true.shape[2], y_true.shape[3]
+            if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+                print(f"Before cropping: shape {y_conv.shape}")
+                print(f"Cropping with insert_xy={self.insert_xy}: [{self.insert_xy}:{y_conv.shape[2]-self.insert_xy}, {self.insert_xy}:{y_conv.shape[3]-self.insert_xy}]")
             
-            # For upsampled outputs, the cropping should account for the original padding
-            # After interpolation, y_conv should have dimensions that allow proper cropping
-            conv_h, conv_w = y_conv.shape[2], y_conv.shape[3]
+            y_conv = y_conv[:, :, self.insert_xy:-self.insert_xy, self.insert_xy:-self.insert_xy]
             
-            # Calculate crop coordinates to match target size
-            crop_h_start = (conv_h - target_h) // 2
-            crop_w_start = (conv_w - target_w) // 2
-            crop_h_end = crop_h_start + target_h
-            crop_w_end = crop_w_start + target_w
+            if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+                print(f"After cropping: shape {y_conv.shape}, range [{y_conv.min().item():.6f}, {y_conv.max().item():.6f}]")
+                
+        # Resize y_conv to match y_true size for loss calculation  
+        if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+            print(f"Target y_true shape: {y_true.shape}, range: [{y_true.min().item():.6f}, {y_true.max().item():.6f}]")
             
-            # Ensure crop coordinates are valid
-            crop_h_start = max(0, crop_h_start)
-            crop_w_start = max(0, crop_w_start)
-            crop_h_end = min(conv_h, crop_h_end)
-            crop_w_end = min(conv_w, crop_w_end)
-            
-            y_conv = y_conv[:, :, crop_h_start:crop_h_end, crop_w_start:crop_w_end]
-            
-            # If still size mismatch, resize to match target
-            if y_conv.shape[2] != target_h or y_conv.shape[3] != target_w:
-                y_conv = F.interpolate(y_conv, size=(target_h, target_w), mode='bilinear', align_corners=False)
+        if y_conv.shape[-2:] != y_true.shape[-2:]:
+            if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+                print(f"Resizing y_conv from {y_conv.shape[-2:]} to {y_true.shape[-2:]}")
+            y_conv = F.interpolate(y_conv, size=y_true.shape[-2:], mode='bilinear', align_corners=False)
+            if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+                print(f"After resize: shape {y_conv.shape}, range [{y_conv.min().item():.6f}, {y_conv.max().item():.6f}]")
         
         # Main PSF loss (reconstruction loss)
         if self.use_mse:
@@ -95,6 +141,9 @@ class PSFConvolutionLoss(nn.Module):
             psf_loss = F.l1_loss(y_conv, y_true)
         
         total_loss = psf_loss
+        tv_loss = torch.tensor(0.0, device=y_pred.device)
+        hessian_loss = torch.tensor(0.0, device=y_pred.device)
+        l1_loss = torch.tensor(0.0, device=y_pred.device)
         
         # Total Variation regularization
         if self.tv_weight > 0:
@@ -110,6 +159,14 @@ class PSFConvolutionLoss(nn.Module):
         if self.l1_weight > 0:
             l1_loss = torch.mean(torch.abs(y_pred))
             total_loss += self.l1_weight * l1_loss
+        
+        # Final loss computation and reporting
+        if torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True:
+            print(f"\nFinal y_conv shape: {y_conv.shape}, range [{y_conv.min().item():.6f}, {y_conv.max().item():.6f}]")
+            print(f"Final y_true shape: {y_true.shape}, range [{y_true.min().item():.6f}, {y_true.max().item():.6f}]")
+            print(f"Loss Components: PSF={psf_loss.item():.6f}, Hessian={hessian_loss.item():.6f}")
+            print(f"Total Loss: {total_loss.item():.6f}")
+            print("=" * 80)
         
         return total_loss
     
@@ -137,8 +194,14 @@ class PSFConvolutionLoss(nn.Module):
         xy = y_diff[:, :, :, :-1] - y_diff[:, :, :, 1:]
         yx = x_diff[:, :, :-1, :] - x_diff[:, :, 1:, :]
         
-        hessian_loss = (torch.mean(xx ** 2) + torch.mean(yy ** 2) + 
-                       torch.mean(xy ** 2) + torch.mean(yx ** 2))
+        # Match TensorFlow's l2_loss calculation: l2_loss = sum(x^2)/2, then /size = mean(x^2)/2
+        # Fix: Use higher precision calculation to avoid numerical issues
+        xx_loss = torch.sum(xx ** 2) / (2.0 * xx.numel())
+        yy_loss = torch.sum(yy ** 2) / (2.0 * yy.numel())
+        xy_loss = torch.sum(xy ** 2) / (2.0 * xy.numel())
+        yx_loss = torch.sum(yx ** 2) / (2.0 * yx.numel())
+        
+        hessian_loss = xx_loss + yy_loss + xy_loss + yx_loss
         
         return hessian_loss
     

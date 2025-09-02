@@ -11,7 +11,7 @@ import tensorflow as tf
 import math
 
 os.environ["TF_ENABLE_AUTO_MIXED_PRECISION"] = '1'
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.95)
 tf.compat.v1.Session(config=tf.compat.v1.compat.v1.ConfigProto(gpu_options=gpu_options))
 

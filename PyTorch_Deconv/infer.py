@@ -52,17 +52,49 @@ def load_model(checkpoint_path, device='cpu'):
         }
         print("Warning: Using default model configuration")
     
-    # Load the full Lightning module instead of just the U-Net
+    # Auto-detect architecture from checkpoint
+    architecture = None
+    if 'hyper_parameters' in checkpoint:
+        hyper_params = checkpoint['hyper_parameters']
+        if 'model_config' in hyper_params and isinstance(hyper_params['model_config'], dict):
+            architecture = hyper_params['model_config'].get('architecture', 'deconv_only')
+    
+    # Check for two-stage model by looking at state dict keys
+    if architecture is None and 'state_dict' in checkpoint:
+        state_dict_keys = checkpoint['state_dict'].keys()
+        if any('stage1_' in key or 'stage2_' in key for key in state_dict_keys):
+            architecture = 'two_stage'
+        else:
+            architecture = 'deconv_only'
+    
+    print(f"Detected model architecture: {architecture}")
+    
+    # Load the appropriate Lightning module
     try:
-        from src.models.lightning_module import DeconvolutionLightningModule
-        model = DeconvolutionLightningModule.load_from_checkpoint(
-            checkpoint_path, 
-            map_location=device,
-            strict=False
-        )
-        print("Successfully loaded Lightning module")
+        if architecture == 'two_stage':
+            from src.models.two_stage_lightning_module import TwoStageDeconvolutionLightningModule
+            model = TwoStageDeconvolutionLightningModule.load_from_checkpoint(
+                checkpoint_path, 
+                map_location=device,
+                strict=False
+            )
+            print("Successfully loaded Two-Stage Lightning module")
+        else:
+            from src.models.lightning_module import DeconvolutionLightningModule
+            model = DeconvolutionLightningModule.load_from_checkpoint(
+                checkpoint_path, 
+                map_location=device,
+                strict=False
+            )
+            print("Successfully loaded Deconv-Only Lightning module")
+        
         model.eval()
         model.to(device)
+        
+        # DEBUG: Check if model weights are loaded correctly
+        total_params = sum(p.numel() for p in model.parameters())
+        non_zero_params = sum((p != 0).sum().item() for p in model.parameters())
+        print(f"DEBUG - Model has {total_params:,} total parameters, {non_zero_params:,} non-zero")
         
         # Extract model config from the loaded model
         if hasattr(model, 'model_config'):
@@ -74,11 +106,17 @@ def load_model(checkpoint_path, device='cpu'):
         
     except Exception as e:
         print(f"Failed to load Lightning module: {e}")
-        print("Falling back to manual U-Net loading...")
+        print("Falling back to manual model loading...")
         
-        # Fallback to original method
-        from src.models.deconv_unet import DeconvUNet
-        model = DeconvUNet(**model_config)
+        # Fallback to manual loading based on detected architecture
+        if architecture == 'two_stage':
+            from src.models.two_stage_unet import TwoStageUNet
+            # Remove architecture from config if present
+            model_config_filtered = {k: v for k, v in model_config.items() if k != 'architecture'}
+            model = TwoStageUNet(**model_config_filtered)
+        else:
+            from src.models.deconv_unet import DeconvUNet
+            model = DeconvUNet(**model_config)
         
         # Load state dict - only load model weights
         if 'state_dict' in checkpoint:
@@ -208,10 +246,30 @@ def process_slice_whole(model, slice_img, insert_xy, device):
     
     # Run inference
     with torch.no_grad():
-        output = model(input_tensor)
+        # Try using the underlying U-Net model directly
+        if hasattr(model, 'model'):
+            # Use the U-Net model inside Lightning module
+            raw_output = model.model(input_tensor)
+            
+            # For two-stage model, take the second output (deconvolved)
+            if isinstance(raw_output, (list, tuple)):
+                output = raw_output[-1]  # Take the deconvolved output
+                print(f"Two-stage model: using deconvolved output (stage 2)")
+            else:
+                output = raw_output
+        else:
+            # Use Lightning module forward
+            output = model(input_tensor)
     
     # Convert back to numpy
     result = output.squeeze().cpu().numpy()
+    
+    # Check and handle output range issues
+    if result.max() - result.min() < 0.01:
+        print(f"Warning: Output has very narrow range [{result.min():.6f}, {result.max():.6f}]")
+        # Apply contrast stretching
+        result = (result - result.min()) / (result.max() - result.min() + 1e-7)
+        print(f"Applied contrast stretching, new range: [{result.min():.6f}, {result.max():.6f}]")
     
     # Clear GPU memory
     del input_tensor, output

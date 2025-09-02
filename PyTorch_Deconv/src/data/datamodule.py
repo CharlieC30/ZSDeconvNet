@@ -90,6 +90,7 @@ class TiffSliceDataset(Dataset):
         input_slice = input_slice.astype(np.float32)
         target_slice = target_slice.astype(np.float32)
         
+        
         # Normalize if requested
         if self.normalize:
             input_slice = self._normalize_image(input_slice)

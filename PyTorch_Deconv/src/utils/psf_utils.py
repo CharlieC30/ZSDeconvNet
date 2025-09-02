@@ -97,21 +97,18 @@ def load_and_process_psf(psf_path, target_shape, target_dx, target_dy, psf_dx=No
     # Normalize PSF
     psf = psf / np.sum(psf)
     
-    # Crop PSF for computational efficiency
+    # Crop PSF for computational efficiency - match TensorFlow version exactly
     sigma_y, sigma_x = psf_estimator_2d(psf)
-    ksize = int(max(sigma_y, sigma_x) * 4)
+    ksize = int(sigma_y * 4)  # TensorFlow uses only sigma_y, not max(sigma_y, sigma_x)
     
-    half_h = psf.shape[0] // 2
-    half_w = psf.shape[1] // 2
+    # Match TensorFlow cropping logic exactly
+    psf_height, psf_width = psf.shape
+    halfx = psf_width // 2
+    halfy = psf_height // 2
     
-    if ksize <= min(half_h, half_w):
-        # Crop PSF around center
-        h_start = max(0, half_h - ksize)
-        h_end = min(psf.shape[0], half_h + ksize + 1)
-        w_start = max(0, half_w - ksize)
-        w_end = min(psf.shape[1], half_w + ksize + 1)
-        
-        psf_cropped = psf[h_start:h_end, w_start:w_end]
+    if ksize <= halfx:  # TensorFlow condition: only check x direction
+        # Crop PSF around center (exact TensorFlow logic)
+        psf_cropped = psf[halfx-ksize:halfx+ksize+1, halfy-ksize:halfy+ksize+1]
     else:
         psf_cropped = psf
     
