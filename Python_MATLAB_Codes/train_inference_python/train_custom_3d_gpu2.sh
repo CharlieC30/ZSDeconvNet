@@ -17,19 +17,19 @@ echo "================================="
 
 # 執行訓練
 python Train_ZSDeconvNet_3D.py \
-  --psf_path '../../Python_PSF/PSFoutput/optical/PSF_optical_NA0.8_lambda525_size79_Z23.tif' \
-  --data_dir '../your_augmented_datasets/' \
-  --folder 'roiC_0901_1142_100' \
+  --psf_path '../../Python_PSF/PSFoutput/optical/PSF_optical_NA1.1_lambda525_size79_Z23.tif' \
+  --data_dir '../your_augmented_datasets/iUExM/' \
+  --folder 'test_to_charlie_0902_2000_100' \
   --test_images_path '../../Raw_Data/FromGary/input/iUExM/roiC_crop128_1128.tif' \
   --save_weights_dir './my_models_3d' \
-  --save_weights_suffix '_PSF_optical_NA0.8_lambda525_size79_Z23_upsample1' \
+  --save_weights_suffix '_PSF_optical_NA1.1_lambda525_size79_Z23_upsample1' \
   --model 'twostage_RCAN3D' \
   --upsample_flag 1 \
   --iterations 500 \
   --test_interval 500 \
   --valid_interval 100 \
   --batch_size 2 \
-  --gpu_id 3 \
+  --gpu_id 2 \
   --gpu_memory_fraction 0.9 \
   --input_y 64 \
   --input_x 64 \

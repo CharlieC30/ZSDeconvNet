@@ -22,8 +22,8 @@ export TF_FORCE_GPU_ALLOW_GROWTH=true
 
 # 執行推論
 python Infer_3D.py \
-  --input_dir 'data/ori_input/iUExM/roiC.tif' \
-  --load_weights_path './my_models_3d/iUExM/roiC_0901_1142_100_twostage_RCAN3D_PSF_optical_NA0.8_lambda525_size79_Z23_upsample1_500/weights_500.h5' \
+  --input_dir 'data/ori_input/aisr/aisr122424_roi.tif' \
+  --load_weights_path './my_models_3d/aisr122424_roi_0905_1200_100_twostage_RCAN3D_PSF_XY1.88um_Z15.04um_oddZ_111_upsample0/weights_500.h5' \
   --model 'twostage_RCAN3D' \
   --background 100 \
   --num_seg_window_x 4 \
@@ -34,7 +34,7 @@ python Infer_3D.py \
   --overlap_z 4 \
   --insert_xy 8 \
   --insert_z 2 \
-  --upsample_flag 1 \
+  --upsample_flag 0 \
   --Fourier_damping_flag 0
 
 echo "推論完成！"

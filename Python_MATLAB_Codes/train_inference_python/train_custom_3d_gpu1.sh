@@ -17,12 +17,12 @@ echo "================================="
 
 # 執行訓練
 python Train_ZSDeconvNet_3D.py \
-  --psf_path '../../Python_PSF/PSFoutput/optical/PSF_optical_NA0.8_lambda525_size79_Z23.tif' \
-  --data_dir '../your_augmented_datasets/' \
-  --folder 'roiC_0901_1142_100' \
+  --psf_path '../../Python_PSF/PSFoutput/other/PSF_XY1.88um_Z15.04um_oddZ_111.tif' \
+  --data_dir '../your_augmented_datasets/aisr/' \
+  --folder 'aisr122424_roi_0905_1200_100' \
   --test_images_path '../../Raw_Data/FromGary/input/iUExM/roiC_crop128_1128.tif' \
   --save_weights_dir './my_models_3d' \
-  --save_weights_suffix '_PSF_optical_NA0.8_lambda525_size79_Z23_upsample0' \
+  --save_weights_suffix '_PSF_XY1.88um_Z15.04um_oddZ_111_upsample0' \
   --model 'twostage_RCAN3D' \
   --upsample_flag 0 \
   --iterations 500 \
@@ -36,10 +36,10 @@ python Train_ZSDeconvNet_3D.py \
   --input_z 13 \
   --insert_xy 8 \
   --insert_z 2 \
-  --dx 0.0926 \
-  --dz 0.0926 \
-  --dxpsf 0.0926 \
-  --dzpsf 0.0926 \
+  --dx 0.5 \
+  --dz 2 \
+  --dxpsf 1 \
+  --dzpsf 1 \
   --background 100 \
   --mse_flag 0 \
   --TV_weight 0.0 \

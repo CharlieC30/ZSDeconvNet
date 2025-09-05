@@ -132,8 +132,8 @@ path = glob.glob(test_images_path)
 image_batch = []
 for curp in path:
     image = tiff.imread(curp).astype('float')
-    image = image - background
-    image[image < 0] = 0
+    # image = image - background
+    # image[image < 0] = 0
     image_batch.append(image)
 image = prctile_norm(np.array(image_batch))
 input_test = np.transpose(image, (0,2,3,1))
@@ -189,7 +189,7 @@ PSF2 = np.zeros((psf_width,psf_height,len(zi2)))
 for i in range(psf_width):
     for j in range(psf_height):
         curCol = psf_g[i,j,0:half_psf_depth]
-        interp = interp1d(z2, curCol, 'slinear')
+        interp = interp1d(z2, curCol, 'slinear', fill_value='extrapolate')
         PSF2[i,j,:] = interp(zi2)
 psf_g = np.concatenate((PSF2,PSF1),axis=2)
 psf_g = psf_g/np.sum(psf_g)

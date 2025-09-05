@@ -371,12 +371,12 @@ class DataAugmFor3D:
 if __name__ == "__main__":
     # 設定參數（與 MATLAB 版本對應）
     augmentor = DataAugmFor3D(
-        data_path='/home/aero/charliechang/projects/ZS-DeconvNet/Python_MATLAB_Codes/train_inference_python/data/ori_input/iUExM/roiC.tif',
-        save_path='../your_augmented_datasets/',
+        data_path='/home/aero/charliechang/projects/ZS-DeconvNet/Python_MATLAB_Codes/train_inference_python/data/ori_input/aisr/aisr122424_roi.tif',
+        save_path='../your_augmented_datasets/aisr/',
         seg_x=64,
         seg_y=64,
         seg_z=13,
-        seg_num=10000,  # 先生成 100 個測試
+        seg_num=100,  # 先生成 100 個測試
         rot_flag=True
     )
     

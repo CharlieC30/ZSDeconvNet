@@ -149,5 +149,5 @@ def create_gaussian_psf_file(size=31, sigma=3.0):
     return saved_path
 
 if __name__ == "__main__":
-    create_optical_psf_file(dxy=31.3, dz=31.3, SizeXY=79, SizeZ=23, wavelength=525, NA=0.8, RI=1.3)
+    create_optical_psf_file(dxy=31.3, dz=31.3, SizeXY=79, SizeZ=8, wavelength=525, NA=5.0, RI=1.3)
     # create_gaussian_psf_file(size=257, sigma=4.0)
