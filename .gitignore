@@ -4,7 +4,6 @@ PyTorch_Deconv_v1.zip
 Python_PSF/generated_psfs/*
 
 **/__pycache__/
-Python_MATLAB_Codes/train_inference_python/utils/__pycache__/*
 
 .vscode/
 .idea/
@@ -15,26 +14,26 @@ env/
 
 .DS_Store
 
-Fiji_Plugin/result
+Fiji_Plugin/result/
+
+Python_MATLAB_Codes/train_inference_python/data
+Python_MATLAB_Codes/train_inference_python/my_models
+Python_MATLAB_Codes/train_inference_python/my_models_3d
+Python_MATLAB_Codes/your_augmented_datasets
 
 PyTorch_Deconv/Data/Output/
 PyTorch_Deconv/Data/InferenceInput/
 PyTorch_Deconv/Data/InferenceResult/
 PyTorch_Deconv/Data/PSF/
 PyTorch_Deconv/Data/Train/
-
 PyTorch_Deconv/experiments/*/
-
 PyTorch_Deconv/Data/063025/
 
-Python_PSF/PSFoutput
-Python_PSF/PSFtest
+Python_PSF/PSFoutput/
+Python_PSF/PSFtest/
 
 Screenshot
-Vibe_coding_prompt
+Vibe_coding_prompt/
 
-Python_MATLAB_Codes/train_inference_python/data
-Python_MATLAB_Codes/train_inference_python/my_models
-Python_MATLAB_Codes/train_inference_python/my_models_3d
-Python_MATLAB_Codes/train_inference_python/my_models_3D
-Python_MATLAB_Codes/your_augmented_datasets
+
+PyTorch_3d/data
