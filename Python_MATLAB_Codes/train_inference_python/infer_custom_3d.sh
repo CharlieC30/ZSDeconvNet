@@ -7,8 +7,8 @@ export TF_FORCE_GPU_ALLOW_GROWTH=true
 # export CUDA_VISIBLE_DEVICES=1
 
 python Infer_3D.py \
-  --input_dir 'data/ori_input/aisr/aisr122424_roi.tif' \
-  --load_weights_path './my_models_3d/aisr122424_roi_0905_1200_100_twostage_RCAN3D_PSF_XY1.88um_Z15.04um_oddZ_118_upsample0/weights_500.h5' \
+  --input_dir 'data/ori_input/iUExM/iUExM_roi.tif' \
+  --load_weights_path './my_models_3d/iUExM_roi_0916_1550_100_twostage_RCAN3D_PSF_XY1.88um_Z15.04um_oddZ_118_upsample0/weights_500.h5' \
   --model 'twostage_RCAN3D' \
   --background 100 \
   --num_seg_window_x 4 \

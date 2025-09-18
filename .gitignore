@@ -1,39 +1,31 @@
-Python_MATLAB_Codes/saved_models/*
-Raw_Data/*
-PyTorch_Deconv_v1.zip
-Python_PSF/generated_psfs/*
-
 **/__pycache__/
-
 .vscode/
 .idea/
-
 .venv/
 venv/
 env/
-
 .DS_Store
 
-Fiji_Plugin/result/
-
+Python_MATLAB_Codes/saved_models
 Python_MATLAB_Codes/train_inference_python/data
-Python_MATLAB_Codes/train_inference_python/my_models
 Python_MATLAB_Codes/train_inference_python/my_models_3d
 Python_MATLAB_Codes/your_augmented_datasets
 
-PyTorch_Deconv/Data/Output/
-PyTorch_Deconv/Data/InferenceInput/
-PyTorch_Deconv/Data/InferenceResult/
-PyTorch_Deconv/Data/PSF/
-PyTorch_Deconv/Data/Train/
-PyTorch_Deconv/experiments/*/
-PyTorch_Deconv/Data/063025/
+PyTorch_Deconv/
+# PyTorch_Deconv/Data/Output/
+# PyTorch_Deconv/Data/InferenceInput/
+# PyTorch_Deconv/Data/InferenceResult/
+# PyTorch_Deconv/Data/PSF/
+# PyTorch_Deconv/Data/Train/
+# PyTorch_Deconv/experiments/*/
+# PyTorch_Deconv/Data/063025/
+
+PyTorch_3d/
+# PyTorch_3d/data
 
 Python_PSF/PSFoutput/
 Python_PSF/PSFtest/
 
+Raw_Data
 Screenshot
-Vibe_coding_prompt/
-
-
-PyTorch_3d/data
+Vibe_coding_prompt

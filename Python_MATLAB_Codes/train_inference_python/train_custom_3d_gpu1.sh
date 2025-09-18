@@ -5,8 +5,8 @@ conda activate zs-deconvnet
 
 python Train_ZSDeconvNet_3D.py \
   --psf_path '../../Python_PSF/PSFoutput/other/PSF_XY1.88um_Z15.04um_oddZ_118.tif' \
-  --data_dir '../your_augmented_datasets/aisr/' \
-  --folder 'aisr122424_roi_0905_1200_100' \
+  --data_dir '../your_augmented_datasets/iUExM/' \
+  --folder 'iUExM_roi_0916_1550_100' \
   --test_images_path '../../Raw_Data/FromGary/input/iUExM/roiC_crop128_1128.tif' \
   --save_weights_dir './my_models_3d' \
   --save_weights_suffix '_PSF_XY1.88um_Z15.04um_oddZ_118_upsample0' \
