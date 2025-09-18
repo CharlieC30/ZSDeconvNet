@@ -132,8 +132,8 @@ path = glob.glob(test_images_path)
 image_batch = []
 for curp in path:
     image = tiff.imread(curp).astype('float')
-    image = image - background
-    image[image < 0] = 0
+    # image = image - background
+    # image[image < 0] = 0
     image_batch.append(image)
 image = prctile_norm(np.array(image_batch))
 input_test = np.transpose(image, (0,2,3,1))
@@ -161,38 +161,38 @@ my_optimizer = optimizers.Adam(learning_rate=start_lr, beta_1=0.9, beta_2=0.999,
 #                          calculate and process otf & psf
 # --------------------------------------------------------------------------------
 psf_g = np.float32(imageio.mimread(psf_path))
-psf_g = np.transpose(psf_g,[1,2,0])
+psf_g = np.transpose(psf_g,[1,2,0]) # (z, y, x)->(y, x, z)
 psf_width,psf_height,psf_depth = psf_g.shape
-half_psf_depth = math.floor(psf_depth/2)
+half_psf_depth = math.floor(psf_depth/2) # psf中心位置，一半深度
 
 if psf_depth%2==0:
     raise ValueError('The depth of PSF should be an odd number.')
 
 #get the desired dz by interpolation
-z = np.arange((half_psf_depth+1) * dzpsf, (psf_depth+0.1) * dzpsf, dzpsf)
-zi = np.arange((half_psf_depth+1) * dzpsf, (psf_depth+0.1) * dzpsf, dz)
+z = np.arange((half_psf_depth+1) * dzpsf, (psf_depth+0.1) * dzpsf, dzpsf) # psf的z軸voxel
+zi = np.arange((half_psf_depth+1) * dzpsf, (psf_depth+0.1) * dzpsf, dz) # 影像的z軸voxel
 if zi[-1]>z[-1]:
     zi = zi[0:-1]
-PSF1 = np.zeros((psf_width,psf_height,len(zi)))
+PSF1 = np.zeros((psf_width,psf_height,len(zi))) # PSF1 psf的後半部分
 for i in range(psf_width):
-    for j in range(psf_height):
-        curCol = psf_g[i,j,half_psf_depth:psf_depth]
-        interp = interp1d(z, curCol, 'slinear')
-        PSF1[i,j,:] = interp(zi)
+    for j in range(psf_height): 
+        curCol = psf_g[i,j,half_psf_depth:psf_depth] # 取後半部分的z軸資料
+        interp = interp1d(z, curCol, 'slinear') # 線性插值
+        PSF1[i,j,:] = interp(zi) # 插值到影像的z軸
 z2 = np.zeros((half_psf_depth))
 zi2 = np.zeros((len(zi)-1))
 for n in range(half_psf_depth):
     z2[half_psf_depth-n-1]=z[0]-dzpsf*(n+1)
 for n in range(zi2.shape[0]):
     zi2[len(zi)-1-n-1]=zi[0]-dz*(n+1)
-PSF2 = np.zeros((psf_width,psf_height,len(zi2)))
+PSF2 = np.zeros((psf_width,psf_height,len(zi2))) # PSF2 psf的前半部分
 for i in range(psf_width):
     for j in range(psf_height):
         curCol = psf_g[i,j,0:half_psf_depth]
-        interp = interp1d(z2, curCol, 'slinear')
+        interp = interp1d(z2, curCol, 'slinear', fill_value='extrapolate')
         PSF2[i,j,:] = interp(zi2)
 psf_g = np.concatenate((PSF2,PSF1),axis=2)
-psf_g = psf_g/np.sum(psf_g)
+psf_g = psf_g/np.sum(psf_g) # 重新正規化確保總和為1
 psf_width,psf_height,psf_depth = psf_g.shape
 half_psf_width = psf_width//2
 
@@ -443,10 +443,10 @@ for it in range(iterations-load_init_model_iter):
     insert_shape = np.zeros([batch_size,input_y+2*insert_xy,insert_xy,input_z+2*insert_z,1])
     input = np.concatenate((insert_shape,input,insert_shape),axis=2)
     gt = np.transpose(gt, (0, 3, 4, 2, 1))
-    input_G = np.zeros([batch_size,input_y+insert_xy*2,input_x+insert_xy*2,(input_z+insert_z)*2,1])
+    input_G = np.zeros([batch_size,input_y+insert_xy*2,input_x+insert_xy*2,(input_z+insert_z)*2,1]) #[B, Y, X, Z, 1]
     for z in range(insert_z,input_z*2+insert_z,2):
-        input_G[:,insert_xy:input_y+insert_xy,insert_xy:input_x+insert_xy,z,0] = gt[:,:,:,(z-insert_z)//2,0]
-        input_G[:,:,:,z+1,0] = input[:,:,:,(z+insert_z)//2,0]
+        input_G[:,insert_xy:input_y+insert_xy,insert_xy:input_x+insert_xy,z,0] = gt[:,:,:,(z-insert_z)//2,0] # 奇數->gt
+        input_G[:,:,:,z+1,0] = input[:,:,:,(z+insert_z)//2,0] # 偶數->input
     
     g_copy.set_weights(g.get_weights())
     output_G = g_copy.predict(input_G)[0]

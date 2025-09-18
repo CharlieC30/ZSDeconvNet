@@ -1,1 +1,0 @@
-# PyTorch Lightning Deconvolution Package

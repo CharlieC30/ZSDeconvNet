@@ -11,7 +11,7 @@ import tensorflow as tf
 import math
 
 os.environ["TF_ENABLE_AUTO_MIXED_PRECISION"] = '1'
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.95)
 tf.compat.v1.Session(config=tf.compat.v1.compat.v1.ConfigProto(gpu_options=gpu_options))
 
@@ -99,8 +99,8 @@ for tif_ind in range(num_tif):
         header,image = read_mrc(file_path[tif_ind])
         image = image.astype('float')
         image = image.transpose((2,1,0))
-    image = image-background
-    image [image<0] = 0
+    # image = image-background
+    # image [image<0] = 0
     image = prctile_norm(image)
     image_name = '%02d'%tif_ind
     inp_z,inp_x,inp_y = image.shape
@@ -232,6 +232,8 @@ for tif_ind in range(num_tif):
         output_dec = np.real(np.fft.ifft2(np.fft.ifftshift(output_dec)))
         
     # save
+    import ipdb;
+    # ipdb.set_trace()
     output_dec = np.uint16(1e4 * prctile_norm(output_dec,3,100))
     output_den = np.uint16(1e4 * prctile_norm(output_den,3,100))
     tiff.imwrite(save_path + image_name+'_dec.tif', np.flip(output_dec,axis=1), dtype='uint16')
